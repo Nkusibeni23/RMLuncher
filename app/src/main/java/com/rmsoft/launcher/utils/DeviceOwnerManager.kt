@@ -47,12 +47,12 @@ class DeviceOwnerManager(context: Context) {
     fun applyAllPolicies() {
         if (!isDeviceOwner()) return
 
-        setStatusBarDisabled(true)
+        // Re-assert the *persisted* status-bar state (admin-toggleable) instead of forcing it off,
+        // and align Lock Task features with it so an enabled status bar/shade isn't blocked by the OS.
+        setStatusBarDisabled(isStatusBarDisabled())
         runCatching { dpm.setLockTaskPackages(adminComponent, lockTaskAllowlist()) }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            runCatching {
-                dpm.setLockTaskFeatures(adminComponent, DevicePolicyManager.LOCK_TASK_FEATURE_NONE)
-            }
+            runCatching { dpm.setLockTaskFeatures(adminComponent, lockTaskFeatures()) }
         }
 
         setCameraDisabled(true)
@@ -109,6 +109,28 @@ class DeviceOwnerManager(context: Context) {
         listOf(appContext.packageName, "com.android.settings") +
             AppWhitelist.getWhitelistedPackages(appContext)
         ).distinct().toTypedArray()
+
+    /**
+     * Lock Task features follow the status-bar toggle. When the status bar is suppressed the kiosk
+     * stays fully locked (no system UI). When the admin enables it we surface the status bar and the
+     * notification shade — NOTIFICATIONS requires HOME, so the three flags are set together.
+     */
+    private fun lockTaskFeatures(): Int =
+        if (isStatusBarDisabled()) {
+            DevicePolicyManager.LOCK_TASK_FEATURE_NONE
+        } else {
+            DevicePolicyManager.LOCK_TASK_FEATURE_SYSTEM_INFO or
+                DevicePolicyManager.LOCK_TASK_FEATURE_NOTIFICATIONS or
+                DevicePolicyManager.LOCK_TASK_FEATURE_HOME
+        }
+
+    /** Re-apply just the Lock Task features after the status-bar toggle changes, without a full sweep. */
+    fun refreshLockTaskFeatures() {
+        if (!isDeviceOwner()) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            runCatching { dpm.setLockTaskFeatures(adminComponent, lockTaskFeatures()) }
+        }
+    }
 
     // ─── Individual policy controls (driven by the admin panel) ─────────────────────
 

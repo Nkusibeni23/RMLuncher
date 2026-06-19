@@ -25,7 +25,12 @@ class CommandExecutor(private val context: Context) {
                 "REAPPLY_POLICIES" -> { owner.applyAllPolicies(); ok("policies re-applied") }
                 "EXIT_KIOSK" -> { KioskBridge.exitKiosk(); ok("kiosk exited") }
                 "ENTER_KIOSK" -> { KioskBridge.enterKiosk(); ok("kiosk entered") }
-                "SET_STATUS_BAR_DISABLED" -> { owner.setStatusBarDisabled(p.bool("disabled")); ok("status bar=${p.bool("disabled")}") }
+                "SET_STATUS_BAR_DISABLED" -> {
+                    owner.setStatusBarDisabled(p.bool("disabled"))
+                    owner.refreshLockTaskFeatures()  // align Lock Task with the new status-bar state
+                    KioskBridge.refreshSystemUi()    // re-apply immersive + shade overlay on the launcher
+                    ok("status bar=${p.bool("disabled")}")
+                }
                 "SET_CAMERA_DISABLED" -> { owner.setCameraDisabled(p.bool("disabled")); ok("camera disabled=${p.bool("disabled")}") }
                 "SET_KEYGUARD_DISABLED" -> { owner.setKeyguardDisabled(p.bool("disabled")); ok("keyguard disabled=${p.bool("disabled")}") }
                 "SET_USER_RESTRICTION" -> {

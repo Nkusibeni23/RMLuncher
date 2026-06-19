@@ -14,13 +14,23 @@ import java.lang.ref.WeakReference
 object KioskBridge {
 
     private var activityRef: WeakReference<Activity>? = null
+    private var refresher: (() -> Unit)? = null
 
-    fun register(activity: Activity) {
+    fun register(activity: Activity, onRefreshSystemUi: (() -> Unit)? = null) {
         activityRef = WeakReference(activity)
+        refresher = onRefreshSystemUi
     }
 
     fun unregister(activity: Activity) {
-        if (activityRef?.get() === activity) activityRef = null
+        if (activityRef?.get() === activity) {
+            activityRef = null
+            refresher = null
+        }
+    }
+
+    /** Re-apply the launcher's immersive mode + notification-shade overlay (e.g. after a toggle). */
+    fun refreshSystemUi() {
+        activityRef?.get()?.let { a -> a.runOnUiThread { runCatching { refresher?.invoke() } } }
     }
 
     fun enterKiosk() {

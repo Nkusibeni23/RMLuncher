@@ -113,7 +113,7 @@ class LauncherActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         // Let the agent drive Lock Task enter/exit through this resumed activity.
-        KioskBridge.register(this)
+        KioskBridge.register(this) { enableImmersiveMode(); blockNotificationShade() }
         enableLockTaskIfOwner()
         enableImmersiveMode()
         dismissKeyguard()
@@ -165,6 +165,10 @@ class LauncherActivity : AppCompatActivity() {
      * (including over launched whitelisted apps) until [onDestroy].
      */
     private fun blockNotificationShade() {
+        if (!deviceOwner.isStatusBarDisabled()) {
+            statusBarBlocker.hide() // admin enabled the shade — stop swallowing the pull-down gesture
+            return
+        }
         if (statusBarBlocker.canBlock()) {
             statusBarBlocker.show()
         } else {
@@ -184,7 +188,13 @@ class LauncherActivity : AppCompatActivity() {
     private fun enableImmersiveMode() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         WindowInsetsControllerCompat(window, binding.root).apply {
-            hide(WindowInsetsCompat.Type.systemBars())
+            if (deviceOwner.isStatusBarDisabled()) {
+                hide(WindowInsetsCompat.Type.systemBars())
+            } else {
+                // Admin enabled the status bar: keep it visible, still hide the nav bar.
+                hide(WindowInsetsCompat.Type.navigationBars())
+                show(WindowInsetsCompat.Type.statusBars())
+            }
             // Sticky immersive: a swipe shows the bars only transiently, then they auto-hide.
             systemBarsBehavior =
                 WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
