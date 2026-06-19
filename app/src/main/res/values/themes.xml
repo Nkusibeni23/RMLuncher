@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.RMSOFTLauncher" parent="Theme.AppCompat.NoActionBar">
+        <!-- Show the system wallpaper behind the launcher window -->
+        <item name="android:windowShowWallpaper">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:colorBackgroundCacheHint">@null</item>
+
+        <!-- Let the wallpaper show through the system bars too -->
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowFullscreen">false</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+    </style>
+
+    <!-- Settings screen: solid dark RMSOFT background (no wallpaper). -->
+    <style name="Theme.RMSOFTLauncher.Settings" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">@color/rmsoft_bg</item>
+        <item name="android:statusBarColor">@color/rmsoft_bg</item>
+        <item name="android:navigationBarColor">@color/rmsoft_bg</item>
+        <item name="colorAccent">@color/rmsoft_accent</item>
+        <item name="android:colorControlActivated">@color/rmsoft_accent</item>
+    </style>
+</resources>

@@ -1,0 +1,13 @@
+{
+  "android.app.extra.PROVISIONING_DEVICE_ADMIN_COMPONENT_NAME": "com.rmsoft.launcher/.utils.RMSOFTAdminReceiver",
+  "android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_DOWNLOAD_LOCATION": "https://REPLACE_WITH_YOUR_HOST/rmsoft-launcher.apk",
+  "android.app.extra.PROVISIONING_DEVICE_ADMIN_SIGNATURE_CHECKSUM": "REPLACE_WITH_BASE64_SHA256_OF_SIGNING_CERT",
+  "android.app.extra.PROVISIONING_SKIP_ENCRYPTION": false,
+  "android.app.extra.PROVISIONING_LEAVE_ALL_SYSTEM_APPS_ENABLED": true,
+  "android.app.extra.PROVISIONING_WIFI_SSID": "REPLACE_WITH_FACILITY_WIFI_SSID",
+  "android.app.extra.PROVISIONING_WIFI_PASSWORD": "REPLACE_WITH_WIFI_PASSWORD",
+  "android.app.extra.PROVISIONING_WIFI_SECURITY_TYPE": "WPA",
+  "android.app.extra.PROVISIONING_ADMIN_EXTRAS_BUNDLE": {
+    "rmsoft.facility": "default"
+  }
+}

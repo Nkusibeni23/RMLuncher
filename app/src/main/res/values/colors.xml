@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_launcher_background">#0A0F1E</color>
+
+    <!-- RMSOFT branding -->
+    <color name="rmsoft_bg">#0A0F1E</color>
+    <color name="rmsoft_card">#16213B</color>
+    <color name="rmsoft_accent">#6BA8FF</color>
+    <color name="rmsoft_text_primary">#FFFFFFFF</color>
+    <color name="rmsoft_text_secondary">#B3FFFFFF</color>
+    <color name="rmsoft_text_tertiary">#80FFFFFF</color>
+    <color name="rmsoft_divider">#1FFFFFFF</color>
+</resources>

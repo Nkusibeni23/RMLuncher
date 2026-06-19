@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Admin policy set for the RMSOFT Device Owner launcher.
+  Every policy used by DeviceOwnerManager / RMSOFTAdminReceiver is declared here; a Device
+  Owner is implicitly granted all of them, but they are listed explicitly for clarity and
+  so the same component also works as a plain device admin where relevant.
+-->
+<device-admin xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-policies>
+        <limit-password />
+        <watch-login />
+        <reset-password />
+        <force-lock />
+        <wipe-data />
+        <expire-password />
+        <encrypted-storage />
+        <disable-camera />
+        <disable-keyguard-features />
+    </uses-policies>
+</device-admin>

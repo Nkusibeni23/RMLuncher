@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Overlay window used to intercept the notification-shade pull-down gesture. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- Adjust system screen brightness from the custom Settings screen. -->
+    <uses-permission android:name="android.permission.WRITE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
+    <!-- Required so the system can bind to our DeviceAdminReceiver as Device Owner. -->
+    <uses-permission android:name="android.permission.BIND_DEVICE_ADMIN" />
+
+    <!-- MDM device agent: network + foreground polling service. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Location reporting in telemetry (auto-granted by Device Owner). -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <application
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:theme="@style/Theme.RMSOFTLauncher"
+        android:persistent="true"
+        tools:ignore="UnusedAttribute"
+        android:usesCleartextTraffic="true">
+
+        <!-- Main Launcher Activity -->
+        <activity
+            android:name=".ui.LauncherActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:stateNotNeeded="true"
+            android:resumeWhilePausing="true"
+            android:screenOrientation="portrait"
+            android:windowSoftInputMode="adjustPan">
+            <intent-filter android:priority="999">
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.MONKEY" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Custom restricted Settings screen -->
+        <activity
+            android:name=".ui.SettingsActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.RMSOFTLauncher.Settings" />
+
+        <!-- PIN-gated admin control panel (reached via long-press on the launcher brand title) -->
+        <activity
+            android:name=".ui.AdminActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:excludeFromRecents="true"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.RMSOFTLauncher.Settings" />
+
+        <!-- Full-screen alert for admin-pushed messages (SHOW_MESSAGE command) -->
+        <activity
+            android:name=".ui.MessageActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:excludeFromRecents="true"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.RMSOFTLauncher.Settings" />
+
+        <!-- Boot receiver to restart launcher if killed -->
+        <receiver
+            android:name=".utils.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- MDM device agent: foreground service that polls the server for commands + telemetry -->
+        <service
+            android:name=".remote.AgentService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!--
+          Device Owner admin receiver. Drives Lock Task (kiosk) Mode and all lockdown policies,
+          and is the component targeted by Android Enterprise QR / EMM provisioning. The
+          PROFILE_PROVISIONING_COMPLETE filter is what lets onProfileProvisioningComplete fire
+          at the end of factory-reset → 6-tap → QR-scan provisioning.
+        -->
+        <receiver
+            android:name=".utils.RMSOFTAdminReceiver"
+            android:permission="android.permission.BIND_DEVICE_ADMIN"
+            android:exported="true">
+            <meta-data
+                android:name="android.app.device_admin"
+                android:resource="@xml/device_admin" />
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+                <action android:name="android.app.action.PROFILE_PROVISIONING_COMPLETE" />
+            </intent-filter>
+        </receiver>
+
+    </application>
+
+</manifest>

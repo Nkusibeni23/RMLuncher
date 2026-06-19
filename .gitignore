@@ -1,0 +1,29 @@
+# Android / Gradle build artifacts
+*.iml
+.gradle/
+/local.properties
+.idea/
+.kotlin/
+.DS_Store
+
+# Claude Code (local, machine-specific)
+.claude/settings.local.json
+/build/
+/captures/
+.externalNativeBuild/
+.cxx/
+
+# Module build outputs
+app/build/
+build/
+
+# Signing / release artifacts — never commit
+*.apk
+*.aab
+*.ap_
+*.keystore
+*.jks
+keystore.properties
+
+# Logs
+*.log
