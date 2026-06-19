@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug-only manifest. The Android manifest merger applies this ONLY to debug builds, so the dev
+  BroadcastReceiver below never ships in release builds. See remote/DevToolsReceiver.kt for usage.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <!-- ADB-triggerable hook to repoint the MDM agent at a new server during development. -->
+        <receiver
+            android:name=".remote.DevToolsReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.rmsoft.launcher.action.SET_SERVER" />
+            </intent-filter>
+        </receiver>
+    </application>
+
+</manifest>

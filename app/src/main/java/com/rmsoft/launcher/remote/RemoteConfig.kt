@@ -12,7 +12,7 @@ import android.content.Context
 object RemoteConfig {
 
     /** Base URL of the rmsoft-mdm server, e.g. https://mdm.rmsoft.example. No trailing slash. */
-    const val DEFAULT_SERVER_URL = "http://192.168.1.103:4000"
+    const val DEFAULT_SERVER_URL = "https://mdm.tugane.com"
 
     /** Shared secret required to enroll — must equal the server's ENROLLMENT_SECRET. */
     const val DEFAULT_ENROLLMENT_SECRET = "rmsoft-enroll-d2a1e709424b3794"
@@ -44,6 +44,14 @@ object RemoteConfig {
         prefs(context).edit()
             .putString(KEY_DEVICE_ID, deviceId)
             .putString(KEY_TOKEN, token)
+            .apply()
+    }
+
+    /** Drop the stored device identity so the agent re-enrolls on its next poll. */
+    fun clearEnrollment(context: Context) {
+        prefs(context).edit()
+            .remove(KEY_TOKEN)
+            .remove(KEY_DEVICE_ID)
             .apply()
     }
 

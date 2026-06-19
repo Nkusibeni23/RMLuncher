@@ -28,8 +28,7 @@
         android:label="@string/app_name"
         android:theme="@style/Theme.RMSOFTLauncher"
         android:persistent="true"
-        tools:ignore="UnusedAttribute"
-        android:usesCleartextTraffic="true">
+        tools:ignore="UnusedAttribute">
 
         <!-- Main Launcher Activity -->
         <activity
