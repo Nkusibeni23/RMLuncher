@@ -3,13 +3,9 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <!-- Overlay window used to intercept the notification-shade pull-down gesture. -->
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <!-- Adjust system screen brightness from the custom Settings screen. -->
     <uses-permission android:name="android.permission.WRITE_SETTINGS"
         tools:ignore="ProtectedPermissions" />
-    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
-        tools:ignore="QueryAllPackagesPermission" />
     <!-- Required so the system can bind to our DeviceAdminReceiver as Device Owner. -->
     <uses-permission android:name="android.permission.BIND_DEVICE_ADMIN" />
 
@@ -21,6 +17,43 @@
     <!-- Location reporting in telemetry (auto-granted by Device Owner). -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <!--
+      Package visibility (Android 11+). We deliberately do NOT use QUERY_ALL_PACKAGES — Play Protect
+      treats it (with device-admin + overlay) as a high-risk "device admin abuse" signal and blocks
+      the app during QR provisioning. The Device Owner is already exempt from visibility filtering in
+      production, so purge/inventory keep working; these <queries> entries keep the app picker and
+      stock-app resolution working before Device Owner is active and in non-managed/debug builds.
+    -->
+    <queries>
+        <!-- Every launchable app — app picker (AppInventory) + compass match (AppResolver). -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <!-- Stock-app role resolution (AppResolver): phone, messages, contacts, calculator, clock, camera. -->
+        <intent>
+            <action android:name="android.intent.action.DIAL" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.APP_MESSAGING" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.APP_CONTACTS" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.APP_CALCULATOR" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SHOW_ALARMS" />
+        </intent>
+        <intent>
+            <action android:name="android.media.action.STILL_IMAGE_CAMERA" />
+        </intent>
+    </queries>
 
     <application
         android:allowBackup="false"
@@ -72,6 +105,25 @@
             android:excludeFromRecents="true"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.RMSOFTLauncher.Settings" />
+
+        <!--
+          Android 10+ managed-provisioning handshake. After QR / NFC / cloud enrollment downloads
+          the APK, installs it, and grants Device Owner, the setup wizard hands off to these two
+          intents. Without an activity to answer them, provisioning aborts with "Can't set up
+          device" on Android 10+ (ADB `dpm set-device-owner` skips this handshake — why the lab
+          path worked but QR didn't). GET_PROVISIONING_MODE declares a fully-managed device;
+          ADMIN_POLICY_COMPLIANCE applies the kiosk policies and lets the wizard finish.
+        -->
+        <activity
+            android:name=".ui.ProvisioningActivity"
+            android:exported="true"
+            android:theme="@style/Theme.RMSOFTLauncher.Settings">
+            <intent-filter>
+                <action android:name="android.app.action.GET_PROVISIONING_MODE" />
+                <action android:name="android.app.action.ADMIN_POLICY_COMPLIANCE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
 
         <!-- Boot receiver to restart launcher if killed -->
         <receiver
