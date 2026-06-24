@@ -49,6 +49,22 @@ object AppWhitelist {
         if (resolved.isNotEmpty()) setWhitelist(context, resolved)
     }
 
+    /**
+     * Merge this device's resolved stock apps (Phone, Messages, Contacts, Clock, Calculator, Compass,
+     * Camera) into the whitelist — idempotent, only adds ones currently installed and not already
+     * present. Called on every policy sweep so the user's core apps are ALWAYS whitelisted and never
+     * caught by the Device Owner purge, even if the one-time seed missed them or ran before they were
+     * (re)installed. Returns true if the whitelist changed.
+     */
+    fun ensureStockApps(context: Context): Boolean {
+        val resolved = AppResolver.resolveStockApps(context)
+        if (resolved.isEmpty()) return false
+        val current = getWhitelistedPackages(context).toMutableSet()
+        if (!current.addAll(resolved)) return false
+        setWhitelist(context, current)
+        return true
+    }
+
     fun setWhitelist(context: Context, packages: Collection<String>) {
         prefs(context).edit().putStringSet(KEY_PACKAGES, packages.toSet()).apply()
     }

@@ -70,6 +70,10 @@ class DeviceOwnerManager(context: Context) {
         }
 
         setAsDefaultHome()
+        // Always re-assert the device's stock apps onto the whitelist BEFORE the hide/purge sweep, so
+        // the user's core apps (phone, messages, contacts, clock, calculator, compass, camera) can
+        // never be hidden or uninstalled by the purge — even if the one-time seed missed them.
+        AppWhitelist.ensureStockApps(appContext)
         hideNonWhitelistedApps()
         purgeNonWhitelistedUserApps()
         grantRuntimePermissions()

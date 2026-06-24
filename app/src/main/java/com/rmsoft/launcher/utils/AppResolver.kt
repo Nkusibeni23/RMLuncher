@@ -11,53 +11,94 @@ import android.provider.Telephony
 import android.telecom.TelecomManager
 
 /**
- * Resolves the **real** package names of stock apps on *this* device.
+ * Resolves the **real** package names of stock apps on *this* device (Phone, Messages, Contacts,
+ * Clock, Calculator, Compass, Camera).
  *
- * OEMs ship different packages than AOSP (e.g. UMIDIGI's dialer/camera are not
- * `com.android.dialer` / `com.android.camera2`), so a hardcoded whitelist silently shows nothing.
- * Instead we ask Android which app currently fills each role — by default-app API or intent
- * resolution — which works on any device. Compass has no standard intent, so we scan launchable
- * apps for it by name.
+ * OEMs ship different packages than AOSP (e.g. MediaTek/UMIDIGI), and on stripped ROMs the role
+ * APIs return nothing (no default SMS app set, apps don't declare the APP_* categories). A miss here
+ * is destructive: an app the resolver doesn't return isn't whitelisted, and the Device Owner purge
+ * then uninstalls it. So each role tries several strategies in order — the registered default, intent
+ * resolution, then a list of well-known package names — and keeps the first that's actually installed.
  */
 object AppResolver {
 
     /** Stock apps RMSOFT wants visible in the launcher, resolved to installed packages, in order. */
     fun resolveStockApps(context: Context): List<String> {
         val pm = context.packageManager
-        val packages = LinkedHashSet<String>()
+        val out = LinkedHashSet<String>()
 
-        // Phone / dialer — the default-dialer API is the most reliable, with ACTION_DIAL as fallback.
-        (defaultDialer(context) ?: resolve(pm, Intent(Intent.ACTION_DIAL)))
-            ?.let { packages.add(it) }
+        // Phone / dialer
+        firstOf(
+            pm,
+            defaultDialer(context),
+            resolve(pm, Intent(Intent.ACTION_DIAL)),
+            firstInstalled(pm, KNOWN_DIALER),
+        )?.let { out.add(it) }
 
-        // Messages — the registered default SMS app, else the messaging-category app.
-        (Telephony.Sms.getDefaultSmsPackage(context) ?: resolveCategory(pm, Intent.CATEGORY_APP_MESSAGING))
-            ?.let { packages.add(it) }
+        // Messages / SMS
+        firstOf(
+            pm,
+            Telephony.Sms.getDefaultSmsPackage(context),
+            resolveCategory(pm, Intent.CATEGORY_APP_MESSAGING),
+            firstInstalled(pm, KNOWN_SMS),
+        )?.let { out.add(it) }
 
         // Contacts
-        (resolveCategory(pm, Intent.CATEGORY_APP_CONTACTS)
-            ?: resolve(pm, Intent(Intent.ACTION_VIEW, ContactsContract.Contacts.CONTENT_URI)))
-            ?.let { packages.add(it) }
+        firstOf(
+            pm,
+            resolveCategory(pm, Intent.CATEGORY_APP_CONTACTS),
+            resolve(pm, Intent(Intent.ACTION_VIEW, ContactsContract.Contacts.CONTENT_URI)),
+            firstInstalled(pm, KNOWN_CONTACTS),
+        )?.let { out.add(it) }
 
-        // Clock — whichever app handles "show alarms".
-        resolve(pm, Intent(AlarmClock.ACTION_SHOW_ALARMS))?.let { packages.add(it) }
+        // Clock
+        firstOf(
+            pm,
+            resolve(pm, Intent(AlarmClock.ACTION_SHOW_ALARMS)),
+            firstInstalled(pm, KNOWN_CLOCK),
+        )?.let { out.add(it) }
 
         // Calculator
-        resolveCategory(pm, Intent.CATEGORY_APP_CALCULATOR)?.let { packages.add(it) }
+        firstOf(
+            pm,
+            resolveCategory(pm, Intent.CATEGORY_APP_CALCULATOR),
+            firstInstalled(pm, KNOWN_CALCULATOR),
+        )?.let { out.add(it) }
 
-        // Compass — no canonical intent; match a launchable app by package/label.
-        findLaunchableByKeyword(pm, "compass")?.let { packages.add(it) }
+        // Compass — no canonical intent; match a launchable app by name, else a known package.
+        (findLaunchableByKeyword(pm, "compass") ?: firstInstalled(pm, KNOWN_COMPASS))
+            ?.let { out.add(it) }
 
-        // Camera — the still-image camera intent.
-        resolve(pm, Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA))?.let { packages.add(it) }
+        // Camera — the still-image / capture intents, else a known package.
+        firstOf(
+            pm,
+            resolve(pm, Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA)),
+            resolve(pm, Intent(MediaStore.ACTION_IMAGE_CAPTURE)),
+            firstInstalled(pm, KNOWN_CAMERA),
+        )?.let { out.add(it) }
 
-        return packages.toList()
+        return out.toList()
     }
 
     private fun defaultDialer(context: Context): String? =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
             (context.getSystemService(Context.TELECOM_SERVICE) as? TelecomManager)?.defaultDialerPackage
         else null
+
+    /** First non-null candidate that resolves to an app actually installed for this user. */
+    private fun firstOf(pm: PackageManager, vararg candidates: String?): String? =
+        candidates.firstOrNull { it != null && it != "android" && isInstalled(pm, it) }
+
+    /** First package in [known] that's installed for this user. */
+    private fun firstInstalled(pm: PackageManager, known: List<String>): String? =
+        known.firstOrNull { isInstalled(pm, it) }
+
+    // MATCH_UNINSTALLED_PACKAGES so we also find apps the purge uninstalled-for-user or hid — they're
+    // still on the device, and re-whitelisting + unhiding (and install-existing) brings them back.
+    private fun isInstalled(pm: PackageManager, pkg: String): Boolean =
+        runCatching {
+            pm.getApplicationInfo(pkg, PackageManager.MATCH_UNINSTALLED_PACKAGES); true
+        }.getOrDefault(false)
 
     /** Best-match package for an intent, skipping the system resolver/chooser. */
     private fun resolve(pm: PackageManager, intent: Intent): String? =
@@ -80,4 +121,17 @@ object AppResolver {
         }
         return null
     }
+
+    // Well-known package names per role — last-resort fallback when the role/intent APIs come up
+    // empty on a stripped or non-standard ROM. Only installed ones are kept.
+    private val KNOWN_DIALER = listOf("com.google.android.dialer", "com.android.dialer", "com.android.phone")
+    private val KNOWN_SMS = listOf("com.google.android.apps.messaging", "com.android.messaging", "com.android.mms")
+    private val KNOWN_CONTACTS = listOf("com.google.android.contacts", "com.android.contacts")
+    private val KNOWN_CLOCK = listOf("com.google.android.deskclock", "com.android.deskclock")
+    private val KNOWN_CALCULATOR = listOf("com.google.android.calculator", "com.android.calculator2")
+    private val KNOWN_COMPASS = listOf("com.google.android.apps.compass", "com.android.compass")
+    private val KNOWN_CAMERA = listOf(
+        "com.mediatek.camera", "com.android.camera2", "com.android.camera",
+        "com.google.android.GoogleCamera",
+    )
 }
