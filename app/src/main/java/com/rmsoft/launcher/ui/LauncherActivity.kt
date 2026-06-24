@@ -136,10 +136,15 @@ class LauncherActivity : AppCompatActivity() {
     /** Keep the screen on, show over the keyguard, and turn the screen on for this activity. */
     private fun applyLockScreenBehavior() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // As Device Owner we disable the keyguard outright (DeviceOwnerManager.setKeyguardDisabled).
+        // We must NOT declare show-when-locked in that case: it keeps the keyguard "showing" behind
+        // this launcher, which then occludes any app launched from the grid (they render black). Only
+        // use show-when-locked as a fallback on a non-managed device where the keyguard can't be off.
+        val managed = deviceOwner.isDeviceOwner()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-            setShowWhenLocked(true)
+            setShowWhenLocked(!managed)
             setTurnScreenOn(true)
-        } else {
+        } else if (!managed) {
             @Suppress("DEPRECATION")
             window.addFlags(
                 WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
@@ -174,18 +179,15 @@ class LauncherActivity : AppCompatActivity() {
             statusBarBlocker.hide() // admin enabled the shade — stop swallowing the pull-down gesture
             return
         }
-        if (statusBarBlocker.canBlock()) {
-            statusBarBlocker.show()
-        } else {
-            runCatching {
-                startActivity(
-                    Intent(
-                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                        Uri.parse("package:$packageName")
-                    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                )
-            }
+        // Device Owner kiosk: Lock Task already blocks the notification shade at the OS level, so the
+        // overlay is unnecessary — skipping it avoids the SYSTEM_ALERT_WINDOW permission entirely (and
+        // the Android-15 ECM black-screen loop that requesting it triggers on a sideloaded app).
+        if (deviceOwner.isDeviceOwner()) {
+            statusBarBlocker.hide()
+            return
         }
+        // Non-managed fallback: use the overlay only if it's already granted; never bounce to Settings.
+        if (statusBarBlocker.canBlock()) statusBarBlocker.show() else statusBarBlocker.hide()
     }
 
     // ─── Immersive sticky: hide nav + status bars, block swipe-out ──────────────

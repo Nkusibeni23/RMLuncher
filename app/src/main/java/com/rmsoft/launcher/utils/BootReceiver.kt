@@ -7,24 +7,28 @@ import com.rmsoft.launcher.remote.AgentService
 import com.rmsoft.launcher.ui.LauncherActivity
 
 /**
- * Automatically launches the RMSOFT launcher after device reboot.
- * Ensures the device always boots into the locked-down environment.
+ * Brings the RMSOFT launcher straight back to the foreground after a **reboot** and after the app
+ * **updates itself** ([Intent.ACTION_MY_PACKAGE_REPLACED]). The latter collapses the brief flash of
+ * the stock launcher that the OS shows while our package is being replaced during an update.
  */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
-            // Re-assert every Device Owner policy on boot — this also hides all non-whitelisted
-            // apps and re-pins this launcher as Home. No-op if not provisioned as Device Owner.
-            DeviceOwnerManager(context).applyAllPolicies()
+        when (intent.action) {
+            Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED -> {
+                // Re-assert every Device Owner policy — hides non-whitelisted apps, re-pins this
+                // launcher as Home, re-grants permissions. No-op if not provisioned as Device Owner.
+                DeviceOwnerManager(context).applyAllPolicies()
 
-            // Start the MDM device agent so the device checks in even before the UI is shown.
-            AgentService.start(context)
+                // Start the MDM device agent so the device checks in even before the UI is shown.
+                AgentService.start(context)
 
-            val launchIntent = Intent(context, LauncherActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                context.startActivity(
+                    Intent(context, LauncherActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                    }
+                )
             }
-            context.startActivity(launchIntent)
         }
     }
 }

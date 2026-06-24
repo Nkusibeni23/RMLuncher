@@ -52,6 +52,10 @@ class RMSOFTAdminReceiver : DeviceAdminReceiver() {
         )
         RemoteConfig.applyProvisioningExtras(context, extras)
 
+        // Seed this device's real stock-app packages before the first policy sweep so the kiosk grid
+        // and lock-task allow-list are correct from the very first boot.
+        AppWhitelist.seedStockApps(context)
+
         val owner = DeviceOwnerManager(context)
         owner.applyAllPolicies()
         owner.setAsDefaultHome()

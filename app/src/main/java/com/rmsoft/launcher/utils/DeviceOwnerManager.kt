@@ -1,10 +1,12 @@
 package com.rmsoft.launcher.utils
 
+import android.app.PendingIntent
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.ApplicationInfo
 import android.os.Build
 import android.os.UserManager
 import com.rmsoft.launcher.BuildConfig
@@ -58,29 +60,37 @@ class DeviceOwnerManager(context: Context) {
         setCameraDisabled(true)
         setKeyguardDisabled(true)
 
+        // Enforce every managed restriction EXCEPT install/uninstall. Blocking those here would also
+        // block managed pushes (INSTALL_APK), the app purge below, and ADB updates — so they stay off
+        // by default; the admin can enforce them explicitly from the dashboard for production.
         MANAGED_RESTRICTIONS.forEach { (key, _) ->
-            // Debug builds keep app installation allowed so we can reinstall over ADB; every
-            // other restriction (and all restrictions in release) stays enforced.
-            val enforce = !(BuildConfig.DEBUG && key == UserManager.DISALLOW_INSTALL_APPS)
-            setUserRestriction(key, enforce)
+            if (key != UserManager.DISALLOW_INSTALL_APPS && key != UserManager.DISALLOW_UNINSTALL_APPS) {
+                setUserRestriction(key, true)
+            }
         }
 
         setAsDefaultHome()
         hideNonWhitelistedApps()
-        grantLocationPermission()
+        purgeNonWhitelistedUserApps()
+        grantRuntimePermissions()
     }
 
     /**
-     * Auto-grant location to ourselves (Device Owner only) so the agent can report GPS coordinates
-     * without any user prompt. Safe no-op when not Device Owner or on failure.
+     * Auto-grant the launcher's runtime (dangerous) permissions to itself — Device Owner only, no
+     * user prompt. Special access like SYSTEM_ALERT_WINDOW / WRITE_SETTINGS are app-ops and can't be
+     * granted this way; the kiosk no longer needs the overlay (see LauncherActivity.blockNotificationShade).
      */
-    fun grantLocationPermission() {
+    fun grantRuntimePermissions() {
         if (!isDeviceOwner()) return
-        runCatching {
-            listOf(
-                android.Manifest.permission.ACCESS_FINE_LOCATION,
-                android.Manifest.permission.ACCESS_COARSE_LOCATION,
-            ).forEach { perm ->
+        val perms = mutableListOf(
+            android.Manifest.permission.ACCESS_FINE_LOCATION,
+            android.Manifest.permission.ACCESS_COARSE_LOCATION,
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            perms.add(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
+        perms.forEach { perm ->
+            runCatching {
                 dpm.setPermissionGrantState(
                     adminComponent,
                     appContext.packageName,
@@ -115,14 +125,37 @@ class DeviceOwnerManager(context: Context) {
      * stays fully locked (no system UI). When the admin enables it we surface the status bar and the
      * notification shade — NOTIFICATIONS requires HOME, so the three flags are set together.
      */
-    private fun lockTaskFeatures(): Int =
-        if (isStatusBarDisabled()) {
-            DevicePolicyManager.LOCK_TASK_FEATURE_NONE
-        } else {
-            DevicePolicyManager.LOCK_TASK_FEATURE_SYSTEM_INFO or
-                DevicePolicyManager.LOCK_TASK_FEATURE_NOTIFICATIONS or
-                DevicePolicyManager.LOCK_TASK_FEATURE_HOME
+    private fun lockTaskFeatures(): Int {
+        // When the whole status bar is suppressed there's no system UI to grant features to.
+        if (isStatusBarDisabled()) return DevicePolicyManager.LOCK_TASK_FEATURE_NONE
+        // HOME is always kept (NOTIFICATIONS requires it); the rest follow per-feature admin toggles.
+        var f = DevicePolicyManager.LOCK_TASK_FEATURE_HOME
+        if (statePrefs.getBoolean(STATE_LTF_SYSTEM_INFO, true)) {
+            f = f or DevicePolicyManager.LOCK_TASK_FEATURE_SYSTEM_INFO
         }
+        if (statePrefs.getBoolean(STATE_LTF_NOTIFICATIONS, true)) {
+            f = f or DevicePolicyManager.LOCK_TASK_FEATURE_NOTIFICATIONS
+        }
+        if (statePrefs.getBoolean(STATE_LTF_GLOBAL_ACTIONS, false)) {
+            f = f or DevicePolicyManager.LOCK_TASK_FEATURE_GLOBAL_ACTIONS
+        }
+        return f
+    }
+
+    /**
+     * Granular control over what the notification/control panel exposes in kiosk (Lock Task):
+     * the notification shade, the status-bar system info, and the power (global-actions) menu.
+     * Persisted and re-applied via [refreshLockTaskFeatures]. Only effective while the status bar
+     * is enabled and the device is pinned.
+     */
+    fun setNotificationPanelFeatures(notifications: Boolean, systemInfo: Boolean, globalActions: Boolean) {
+        statePrefs.edit()
+            .putBoolean(STATE_LTF_NOTIFICATIONS, notifications)
+            .putBoolean(STATE_LTF_SYSTEM_INFO, systemInfo)
+            .putBoolean(STATE_LTF_GLOBAL_ACTIONS, globalActions)
+            .apply()
+        refreshLockTaskFeatures()
+    }
 
     /** Re-apply just the Lock Task features after the status-bar toggle changes, without a full sweep. */
     fun refreshLockTaskFeatures() {
@@ -198,14 +231,29 @@ class DeviceOwnerManager(context: Context) {
     }
 
     /**
-     * Factory reset the device, wiping all user data. DESTRUCTIVE — gate behind confirmation.
-     * Requires [UserManager.DISALLOW_FACTORY_RESET] to be cleared first, which this does.
+     * Factory reset the device. DESTRUCTIVE — gate behind confirmation. When [wipeExternalStorage] is
+     * true, also erases shared/SD storage and clears Factory Reset Protection so the phone comes up
+     * completely clean.
+     *
+     * On Android 14+ (API 34) a Device Owner MUST call wipeDevice(); the old wipeData() throws there,
+     * which is why the previous wipeData(0) silently failed. Errors are deliberately NOT swallowed so
+     * the dashboard ack reflects a real failure instead of a misleading "requested".
      */
-    fun factoryReset() {
-        if (!isDeviceOwner()) return
-        runCatching {
-            dpm.clearUserRestriction(adminComponent, UserManager.DISALLOW_FACTORY_RESET)
-            dpm.wipeData(0)
+    fun factoryReset(wipeExternalStorage: Boolean = false) {
+        check(isDeviceOwner()) { "not Device Owner" }
+        // DISALLOW_FACTORY_RESET blocks the user, not the admin, but clear it to be safe.
+        runCatching { dpm.clearUserRestriction(adminComponent, UserManager.DISALLOW_FACTORY_RESET) }
+
+        val flags = if (wipeExternalStorage) {
+            DevicePolicyManager.WIPE_EXTERNAL_STORAGE or DevicePolicyManager.WIPE_RESET_PROTECTION_DATA
+        } else {
+            0
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            dpm.wipeDevice(flags)
+        } else {
+            @Suppress("DEPRECATION")
+            dpm.wipeData(flags)
         }
     }
 
@@ -276,6 +324,41 @@ class DeviceOwnerManager(context: Context) {
         }
     }
 
+    /**
+     * Silently uninstall every **user-installed** (non-system) app that isn't whitelisted. System
+     * apps can't be uninstalled — [hideNonWhitelistedApps] hides those instead. Device Owner only;
+     * already-uninstalled apps are simply skipped, so this is safe to call on every policy sweep.
+     */
+    fun purgeNonWhitelistedUserApps() {
+        if (!isDeviceOwner()) return
+        val pm = appContext.packageManager
+        val keep = (
+            AppWhitelist.getWhitelistedPackages(appContext) +
+                ESSENTIAL_SYSTEM_PACKAGES + appContext.packageName
+            ).toSet()
+        val installer = pm.packageInstaller
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+        } else {
+            PendingIntent.FLAG_UPDATE_CURRENT
+        }
+        pm.getInstalledApplications(0)
+            .filter { (it.flags and ApplicationInfo.FLAG_SYSTEM) == 0 } // user-installed only
+            .map { it.packageName }
+            .filter { it !in keep }
+            .forEach { pkg ->
+                runCatching {
+                    val pi = PendingIntent.getBroadcast(
+                        appContext,
+                        pkg.hashCode(),
+                        Intent(UNINSTALL_ACTION).setPackage(appContext.packageName),
+                        flags,
+                    )
+                    installer.uninstall(pkg, pi.intentSender)
+                }
+            }
+    }
+
     /** A launchable app plus its current hidden/whitelisted state — for the admin panel list. */
     data class ManagedApp(
         val packageName: String,
@@ -309,6 +392,11 @@ class DeviceOwnerManager(context: Context) {
     companion object {
         private const val STATE_STATUS_BAR = "status_bar_disabled"
         private const val STATE_KEYGUARD = "keyguard_disabled"
+        // Per-feature notification/control-panel toggles (Lock Task features).
+        private const val STATE_LTF_NOTIFICATIONS = "ltf_notifications"
+        private const val STATE_LTF_SYSTEM_INFO = "ltf_system_info"
+        private const val STATE_LTF_GLOBAL_ACTIONS = "ltf_global_actions"
+        private const val UNINSTALL_ACTION = "com.rmsoft.launcher.PKG_UNINSTALL_STATUS"
 
         /** Packages kept visible/enabled regardless of the whitelist so the device stays usable. */
         val ESSENTIAL_SYSTEM_PACKAGES = listOf(

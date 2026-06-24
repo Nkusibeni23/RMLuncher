@@ -31,6 +31,15 @@ class CommandExecutor(private val context: Context) {
                     KioskBridge.refreshSystemUi()    // re-apply immersive + shade overlay on the launcher
                     ok("status bar=${p.bool("disabled")}")
                 }
+                "SET_LOCK_TASK_FEATURES" -> {
+                    owner.setNotificationPanelFeatures(
+                        p.optBoolean("notifications", true),
+                        p.optBoolean("systemInfo", true),
+                        p.optBoolean("globalActions", false),
+                    )
+                    KioskBridge.refreshSystemUi()
+                    ok("notification panel updated")
+                }
                 "SET_CAMERA_DISABLED" -> { owner.setCameraDisabled(p.bool("disabled")); ok("camera disabled=${p.bool("disabled")}") }
                 "SET_KEYGUARD_DISABLED" -> { owner.setKeyguardDisabled(p.bool("disabled")); ok("keyguard disabled=${p.bool("disabled")}") }
                 "SET_USER_RESTRICTION" -> {
@@ -56,7 +65,12 @@ class CommandExecutor(private val context: Context) {
                 "INSTALL_APK" -> {
                     val url = p.optString("url")
                     if (url.isBlank()) Result(false, "missing url")
-                    else Result(true, ApkInstaller.installFromUrl(context, url, RemoteConfig.serverUrl(context)))
+                    else {
+                        // Lift the install restriction (if the admin enabled it) so this managed
+                        // push isn't blocked by DISALLOW_INSTALL_APPS.
+                        owner.setUserRestriction("no_install_apps", false)
+                        Result(true, ApkInstaller.installFromUrl(context, url, RemoteConfig.serverUrl(context)))
+                    }
                 }
                 "SHOW_MESSAGE" -> {
                     MessageActivity.show(context, p.optString("title"), p.optString("message"))
@@ -72,7 +86,10 @@ class CommandExecutor(private val context: Context) {
                         ok("server switch staged → $url")
                     }
                 }
-                "FACTORY_RESET" -> { owner.factoryReset(); ok("factory reset requested") }
+                "FACTORY_RESET" -> {
+                    owner.factoryReset(p.bool("wipeExternalStorage"))
+                    ok("wipe started")
+                }
                 else -> Result(false, "unknown command: ${cmd.type}")
             }
         }.getOrElse { Result(false, "error: ${it.message}") }
