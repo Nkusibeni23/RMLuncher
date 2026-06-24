@@ -85,6 +85,20 @@ class MdmApi(private val context: Context) {
         post("/api/device/telemetry", body)
     }
 
+    /** Upload the device's launchable-app inventory for the dashboard app picker. */
+    fun postApps(apps: List<com.rmsoft.launcher.utils.AppInventory.Entry>) {
+        val arr = JSONArray()
+        apps.forEach {
+            arr.put(
+                JSONObject()
+                    .put("packageName", it.packageName)
+                    .put("label", it.label)
+                    .put("system", it.system),
+            )
+        }
+        post("/api/device/apps", JSONObject().put("apps", arr))
+    }
+
     // ─── HTTP plumbing ──────────────────────────────────────────────────────────
 
     private fun get(path: String): JSONObject? = request("GET", path, null, auth = true)

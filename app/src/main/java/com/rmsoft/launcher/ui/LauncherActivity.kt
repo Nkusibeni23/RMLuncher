@@ -75,6 +75,11 @@ class LauncherActivity : AppCompatActivity() {
 
         applyLockScreenBehavior()
 
+        // First run: resolve this device's real stock-app packages (Phone, Messages, Contacts, Clock,
+        // Calculator, Compass, Camera) into the whitelist before policies apply, so applyAllPolicies
+        // unhides them and adds them to the Lock Task allowlist.
+        AppWhitelist.seedStockApps(this)
+
         // Re-assert the full Device Owner lockdown on every cold start (no-op if not provisioned).
         deviceOwner.applyAllPolicies()
 

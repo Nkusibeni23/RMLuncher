@@ -25,14 +25,28 @@ object RemoteConfig {
     private const val KEY_SECRET = "enrollment_secret"
     private const val KEY_TOKEN = "device_token"
     private const val KEY_DEVICE_ID = "device_id"
+    private const val KEY_FACILITY = "facility"
     private const val KEY_PENDING_SERVER = "pending_server_url"
     private const val KEY_PENDING_REENROLL = "pending_server_reenroll"
+
+    /**
+     * Keys read from the QR / NFC provisioning admin-extras bundle
+     * (`PROVISIONING_ADMIN_EXTRAS_BUNDLE`). Supplying these lets one signed APK enroll against any
+     * server with no rebuild — the [DEFAULT_SERVER_URL] / [DEFAULT_ENROLLMENT_SECRET] are only the
+     * fallback when the bundle omits them (e.g. the ADB lab path). See [applyProvisioningExtras].
+     */
+    const val EXTRA_SERVER_URL = "serverUrl"
+    const val EXTRA_ENROLLMENT_SECRET = "enrollmentSecret"
+    const val EXTRA_FACILITY = "facility"
 
     fun serverUrl(context: Context): String =
         prefs(context).getString(KEY_SERVER, null) ?: DEFAULT_SERVER_URL
 
     fun enrollmentSecret(context: Context): String =
         prefs(context).getString(KEY_SECRET, null) ?: DEFAULT_ENROLLMENT_SECRET
+
+    /** Optional facility/site label supplied at provisioning time (null if none). */
+    fun facility(context: Context): String? = prefs(context).getString(KEY_FACILITY, null)
 
     fun deviceToken(context: Context): String? = prefs(context).getString(KEY_TOKEN, null)
 
@@ -60,6 +74,25 @@ object RemoteConfig {
             .putString(KEY_SERVER, url.trimEnd('/'))
             .putString(KEY_SECRET, secret)
             .apply()
+    }
+
+    /**
+     * Persist server URL / enrollment secret / facility from the provisioning admin-extras bundle,
+     * if present. Called from [com.rmsoft.launcher.utils.RMSOFTAdminReceiver] at the end of QR/NFC
+     * provisioning, before the agent's first poll, so the device enrolls against the right server
+     * with no APK rebuild. Missing or blank keys leave the existing value (or the compiled default)
+     * untouched. [BaseBundle] covers both the PersistableBundle (provisioning) and Bundle cases.
+     */
+    fun applyProvisioningExtras(context: Context, extras: android.os.BaseBundle?) {
+        if (extras == null) return
+        val editor = prefs(context).edit()
+        extras.getString(EXTRA_SERVER_URL)?.trim()?.takeIf { it.isNotEmpty() }
+            ?.let { editor.putString(KEY_SERVER, it.trimEnd('/')) }
+        extras.getString(EXTRA_ENROLLMENT_SECRET)?.trim()?.takeIf { it.isNotEmpty() }
+            ?.let { editor.putString(KEY_SECRET, it) }
+        extras.getString(EXTRA_FACILITY)?.trim()?.takeIf { it.isNotEmpty() }
+            ?.let { editor.putString(KEY_FACILITY, it) }
+        editor.apply()
     }
 
     /**

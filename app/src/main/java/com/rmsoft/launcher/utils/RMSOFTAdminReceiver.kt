@@ -1,11 +1,14 @@
 package com.rmsoft.launcher.utils
 
 import android.app.admin.DeviceAdminReceiver
+import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.os.PersistableBundle
 import android.util.Log
 import android.widget.Toast
+import com.rmsoft.launcher.remote.RemoteConfig
 import com.rmsoft.launcher.ui.LauncherActivity
 
 /**
@@ -39,6 +42,15 @@ class RMSOFTAdminReceiver : DeviceAdminReceiver() {
     override fun onProfileProvisioningComplete(context: Context, intent: Intent) {
         super.onProfileProvisioningComplete(context, intent)
         Log.i(TAG, "Provisioning complete — bootstrapping RMSOFT kiosk.")
+
+        // Pull server URL / enrollment secret / facility from the QR (or NFC) admin-extras bundle
+        // BEFORE the agent first polls, so this device enrolls against the right server with no
+        // APK rebuild. Absent keys fall back to the values compiled into RemoteConfig.
+        @Suppress("DEPRECATION")
+        val extras = intent.getParcelableExtra<PersistableBundle>(
+            DevicePolicyManager.EXTRA_PROVISIONING_ADMIN_EXTRAS_BUNDLE,
+        )
+        RemoteConfig.applyProvisioningExtras(context, extras)
 
         val owner = DeviceOwnerManager(context)
         owner.applyAllPolicies()

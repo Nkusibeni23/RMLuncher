@@ -38,6 +38,17 @@ object AppWhitelist {
         return stored?.toList() ?: DEFAULTS
     }
 
+    /**
+     * First-run seed: resolve the real stock-app packages on THIS device (Phone, Messages, Contacts,
+     * Clock, Calculator, Compass, Camera) and persist them as the whitelist. No-op once a whitelist
+     * has been set (by a previous seed or by the admin/dashboard), so it never overrides a choice.
+     */
+    fun seedStockApps(context: Context) {
+        if (prefs(context).contains(KEY_PACKAGES)) return
+        val resolved = AppResolver.resolveStockApps(context)
+        if (resolved.isNotEmpty()) setWhitelist(context, resolved)
+    }
+
     fun setWhitelist(context: Context, packages: Collection<String>) {
         prefs(context).edit().putStringSet(KEY_PACKAGES, packages.toSet()).apply()
     }
@@ -53,8 +64,15 @@ object AppWhitelist {
     fun isWhitelisted(context: Context, packageName: String): Boolean =
         getWhitelistedPackages(context).contains(packageName)
 
+    /**
+     * Reset to the device's stock apps — re-resolves real packages on this device and persists them.
+     * Use this to recover a device that's holding a stale/wrong whitelist (e.g. AOSP names that don't
+     * exist on this OEM). Falls back to clearing the override if nothing resolves.
+     */
     fun resetToDefaults(context: Context) {
-        prefs(context).edit().remove(KEY_PACKAGES).apply()
+        val resolved = AppResolver.resolveStockApps(context)
+        if (resolved.isNotEmpty()) setWhitelist(context, resolved)
+        else prefs(context).edit().remove(KEY_PACKAGES).apply()
     }
 
     private fun prefs(context: Context) =

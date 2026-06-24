@@ -38,6 +38,7 @@ class AgentService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val api by lazy { MdmApi(this) }
     private val executor by lazy { CommandExecutor(this) }
+    private var ticks = 0
 
     override fun onCreate() {
         super.onCreate()
@@ -88,6 +89,14 @@ class AgentService : Service() {
             appVersion = appVersion(),
             whitelist = AppWhitelist.getWhitelistedPackages(this),
         )
+
+        // 3b. Upload the installed-app inventory for the dashboard picker — on the first tick and
+        // then every ~5 minutes (it changes rarely; no need to send it every poll).
+        if (ticks % 20 == 0) {
+            runCatching { api.postApps(com.rmsoft.launcher.utils.AppInventory.list(this)) }
+                .onFailure { Log.w(TAG, "app inventory upload failed: ${it.message}") }
+        }
+        ticks++
 
         // 4. Commit any staged server-URL switch now that the ack + telemetry above have reached
         // the old server. The next tick polls the new URL (and re-enrolls if requested).

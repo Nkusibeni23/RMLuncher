@@ -8,6 +8,8 @@
   "android.app.extra.PROVISIONING_WIFI_PASSWORD": "REPLACE_WITH_WIFI_PASSWORD",
   "android.app.extra.PROVISIONING_WIFI_SECURITY_TYPE": "WPA",
   "android.app.extra.PROVISIONING_ADMIN_EXTRAS_BUNDLE": {
-    "rmsoft.facility": "default"
+    "serverUrl": "https://REPLACE_WITH_YOUR_MDM_SERVER",
+    "enrollmentSecret": "REPLACE_WITH_SERVER_ENROLLMENT_SECRET",
+    "facility": "default"
   }
 }

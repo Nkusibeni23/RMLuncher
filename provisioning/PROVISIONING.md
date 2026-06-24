@@ -36,6 +36,24 @@ the three `REPLACE_WITH_…` values:
 The component name is already correct:
 `com.rmsoft.launcher/.utils.RMSOFTAdminReceiver`.
 
+### Pointing the device at your server via the QR (no APK rebuild)
+
+The `PROVISIONING_ADMIN_EXTRAS_BUNDLE` carries the MDM connection details to the device at
+provisioning time, so **one signed APK enrolls against any server** — you never rebuild to change
+the server URL or rotate the secret. `RMSOFTAdminReceiver.onProfileProvisioningComplete()` reads
+these keys and persists them (via `RemoteConfig.applyProvisioningExtras`) before the agent's first
+poll:
+
+| Extras key | What to put |
+| --- | --- |
+| `serverUrl` | Base URL of your rmsoft-mdm server, e.g. `https://mdm.example.com` (no trailing slash). |
+| `enrollmentSecret` | Must equal the server's `ENROLLMENT_SECRET`. |
+| `facility` | Optional site/facility label stored on the device. |
+
+Any key you omit falls back to the value compiled into `RemoteConfig.kt`. The **dashboard's Enroll
+page generates this whole payload (and the QR) for you** with the server's current URL + secret
+already filled in — prefer that over hand-editing this file.
+
 ### Computing the signature checksum
 
 ```bash
