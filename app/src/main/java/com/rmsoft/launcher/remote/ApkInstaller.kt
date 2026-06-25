@@ -16,7 +16,8 @@ import java.net.URL
  */
 object ApkInstaller {
 
-    private const val INSTALL_ACTION = "com.rmsoft.launcher.APK_INSTALL_STATUS"
+    /** Broadcast action the install session reports status to — handled by [ApkInstallReceiver]. */
+    const val INSTALL_ACTION = "com.rmsoft.launcher.APK_INSTALL_STATUS"
 
     /**
      * Download [url] (absolute, or relative to [base]) and commit an install session.

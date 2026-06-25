@@ -52,14 +52,21 @@ class CommandExecutor(private val context: Context) {
                     owner.setApplicationHidden(pkg, hidden)
                     if (hidden) AppWhitelist.removeFromWhitelist(context, pkg)
                     else AppWhitelist.addToWhitelist(context, pkg)
+                    owner.refreshLockTaskPackages() // keep the kiosk allow-list in sync
+                    KioskBridge.refreshApps()       // reflect on the home grid immediately
                     ok("$pkg hidden=$hidden")
                 }
-                "ENABLE_SYSTEM_APP" -> { owner.enableSystemApp(p.getString("packageName")); ok("enabled ${p.getString("packageName")}") }
+                "ENABLE_SYSTEM_APP" -> {
+                    owner.enableSystemApp(p.getString("packageName"))
+                    KioskBridge.refreshApps()
+                    ok("enabled ${p.getString("packageName")}")
+                }
                 "SET_WHITELIST" -> {
                     val arr = p.optJSONArray("packages")
                     val list = (0 until (arr?.length() ?: 0)).map { arr!!.getString(it) }
                     AppWhitelist.setWhitelist(context, list)
                     owner.applyAllPolicies() // re-hide/show + refresh lock-task allow-list
+                    KioskBridge.refreshApps()
                     ok("whitelist set (${list.size} apps)")
                 }
                 "INSTALL_APK" -> {

@@ -117,12 +117,19 @@ class LauncherActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Let the agent drive Lock Task enter/exit through this resumed activity.
-        KioskBridge.register(this) { enableImmersiveMode(); blockNotificationShade() }
+        // Let the agent drive Lock Task enter/exit and grid refreshes through this resumed activity.
+        KioskBridge.register(
+            this,
+            onRefreshSystemUi = { enableImmersiveMode(); blockNotificationShade() },
+            onRefreshApps = { loadApps() },
+        )
         enableLockTaskIfOwner()
         enableImmersiveMode()
         dismissKeyguard()
         blockNotificationShade()
+        // Reload the grid so dashboard-driven whitelist/hide/install changes that happened while we
+        // were away (or that produced no package broadcast) are reflected the moment we're back.
+        loadApps()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {

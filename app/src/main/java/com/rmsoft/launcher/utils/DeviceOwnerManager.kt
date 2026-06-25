@@ -77,6 +77,21 @@ class DeviceOwnerManager(context: Context) {
         hideNonWhitelistedApps()
         purgeNonWhitelistedUserApps()
         grantRuntimePermissions()
+        enableLocationServices()
+    }
+
+    /**
+     * Turn the system Location master toggle ON as Device Owner. Without this the launcher can hold
+     * the location runtime permission yet still report no position, because every location provider
+     * is disabled while the toggle is off — so [AgentService.lastKnownLocation] always returns null.
+     * API 30+ only ([DevicePolicyManager.setLocationEnabled]); a safe no-op on older devices and when
+     * not Device Owner.
+     */
+    fun enableLocationServices() {
+        if (!isDeviceOwner()) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            runCatching { dpm.setLocationEnabled(adminComponent, true) }
+        }
     }
 
     /**
@@ -167,6 +182,16 @@ class DeviceOwnerManager(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             runCatching { dpm.setLockTaskFeatures(adminComponent, lockTaskFeatures()) }
         }
+    }
+
+    /**
+     * Re-apply just the Lock Task package allow-list from the current whitelist, without a full
+     * sweep. Call after a whitelist change or an app install so the (un)hidden app can actually
+     * launch inside the kiosk.
+     */
+    fun refreshLockTaskPackages() {
+        if (!isDeviceOwner()) return
+        runCatching { dpm.setLockTaskPackages(adminComponent, lockTaskAllowlist()) }
     }
 
     // ─── Individual policy controls (driven by the admin panel) ─────────────────────

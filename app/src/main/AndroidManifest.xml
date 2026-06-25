@@ -136,6 +136,20 @@
             </intent-filter>
         </receiver>
 
+        <!--
+          Install-session result receiver. When a dashboard INSTALL_APK finishes, this whitelists +
+          unhides the new package and refreshes the home grid, so the app actually appears and isn't
+          purged by the next policy sweep. The session targets this action on our own package, so the
+          implicit-broadcast restriction doesn't apply.
+        -->
+        <receiver
+            android:name=".remote.ApkInstallReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.rmsoft.launcher.APK_INSTALL_STATUS" />
+            </intent-filter>
+        </receiver>
+
         <!-- MDM device agent: foreground service that polls the server for commands + telemetry -->
         <service
             android:name=".remote.AgentService"

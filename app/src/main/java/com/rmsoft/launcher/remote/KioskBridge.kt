@@ -15,22 +15,38 @@ object KioskBridge {
 
     private var activityRef: WeakReference<Activity>? = null
     private var refresher: (() -> Unit)? = null
+    private var appsRefresher: (() -> Unit)? = null
 
-    fun register(activity: Activity, onRefreshSystemUi: (() -> Unit)? = null) {
+    fun register(
+        activity: Activity,
+        onRefreshSystemUi: (() -> Unit)? = null,
+        onRefreshApps: (() -> Unit)? = null,
+    ) {
         activityRef = WeakReference(activity)
         refresher = onRefreshSystemUi
+        appsRefresher = onRefreshApps
     }
 
     fun unregister(activity: Activity) {
         if (activityRef?.get() === activity) {
             activityRef = null
             refresher = null
+            appsRefresher = null
         }
     }
 
     /** Re-apply the launcher's immersive mode + notification-shade overlay (e.g. after a toggle). */
     fun refreshSystemUi() {
         activityRef?.get()?.let { a -> a.runOnUiThread { runCatching { refresher?.invoke() } } }
+    }
+
+    /**
+     * Reload the home-screen app grid (e.g. after a whitelist change, hide/show, or app install
+     * pushed from the dashboard). No-op if no launcher is currently resumed — it reloads the grid on
+     * its next onResume anyway.
+     */
+    fun refreshApps() {
+        activityRef?.get()?.let { a -> a.runOnUiThread { runCatching { appsRefresher?.invoke() } } }
     }
 
     fun enterKiosk() {

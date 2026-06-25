@@ -114,11 +114,16 @@ class AgentService : Service() {
         return am.lockTaskModeState != ActivityManager.LOCK_TASK_MODE_NONE
     }
 
+    /** Freshest fix observed via [requestFreshFix], updated asynchronously between ticks. */
+    @Volatile
+    private var cachedFix: Location? = null
+
     /**
-     * Best last-known fix from GPS or network provider. Returns null if location permission is
-     * absent (Device Owner auto-grants it via [DeviceOwnerManager.applyAllPolicies]) or no provider
-     * has a fix yet. Uses last-known rather than active updates to keep the sealed kiosk's battery
-     * and footprint minimal.
+     * Best fix to report: the newest of every provider's last-known position and the most recent
+     * actively-requested fix ([cachedFix]). Returns null if location permission is absent (Device
+     * Owner auto-grants it via [DeviceOwnerManager.applyAllPolicies]) or nothing has produced a fix
+     * yet. Also kicks off [requestFreshFix] so a sealed kiosk — which runs no other location app to
+     * warm the providers — still produces a position on subsequent ticks.
      */
     private fun lastKnownLocation(): Location? {
         val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
@@ -127,12 +132,31 @@ class AgentService : Service() {
             PackageManager.PERMISSION_GRANTED
         if (!granted) return null
         val lm = getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        requestFreshFix(lm)
         return runCatching {
-            listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
+            (listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
                 .filter { lm.isProviderEnabled(it) }
-                .mapNotNull { lm.getLastKnownLocation(it) }
+                .mapNotNull { lm.getLastKnownLocation(it) } + listOfNotNull(cachedFix))
                 .maxByOrNull { it.time }
         }.getOrNull()
+    }
+
+    /**
+     * Ask each enabled provider for a single current fix and cache the result for the next telemetry
+     * cycle. Async + best-effort so it never blocks the agent loop. API 30+ ([LocationManager
+     * .getCurrentLocation]); on older devices last-known alone is used.
+     */
+    private fun requestFreshFix(lm: LocationManager) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+        runCatching {
+            listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
+                .filter { lm.isProviderEnabled(it) }
+                .forEach { provider ->
+                    lm.getCurrentLocation(provider, null, ContextCompat.getMainExecutor(this)) { loc ->
+                        if (loc != null && loc.time >= (cachedFix?.time ?: 0L)) cachedFix = loc
+                    }
+                }
+        }
     }
 
     private fun appVersion(): String =
