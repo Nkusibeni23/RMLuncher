@@ -19,21 +19,70 @@ class MdmApi(private val context: Context) {
     /** A command pulled from the server. */
     data class RemoteCommand(val id: String, val type: String, val payload: JSONObject)
 
-    /** Enroll this device; returns true on success (token saved to [RemoteConfig]). */
+    /**
+     * Enroll this device against rmsoft-server. Two-step: log in with the device @rmsoft.rw account to
+     * get a JWT, then POST /api/enroll to receive the deviceId + MQTT creds. Saves both to
+     * [RemoteConfig] on success; the persistent MQTT link ([MqttManager]) takes over from there.
+     * Returns true on success. No-ops (false) until enrollment credentials are provisioned.
+     */
     fun enroll(name: String, model: String, androidSdk: Int, appVersion: String): Boolean {
-        val body = JSONObject()
-            .put("enrollmentSecret", RemoteConfig.enrollmentSecret(context))
-            .put("name", name)
-            .put("model", model)
-            .put("androidSdk", androidSdk)
-            .put("appVersion", appVersion)
-        RemoteConfig.deviceId(context)?.let { body.put("deviceId", it) }
+        if (!RemoteConfig.hasEnrollCredentials(context)) return false // awaiting QR/login provisioning
 
-        val res = post("/api/device/enroll", body, auth = false) ?: return false
+        // 1. Login → JWT.
+        val token = login() ?: return false
+
+        // 2. Enroll → deviceId + MQTT creds.
+        val body = JSONObject()
+            .put("serialNumber", deviceSerial())
+            .put("model", model)
+            .put("androidVersion", android.os.Build.VERSION.RELEASE)
+            .put("romBuild", android.os.Build.DISPLAY)
+        hardwareSerial()?.let { body.put("hardwareSerial", it) }
+
+        val res = request("POST", "/api/enroll", body, auth = false, bearer = token) ?: return false
         val deviceId = res.optString("deviceId").ifBlank { return false }
-        val token = res.optString("token").ifBlank { return false }
+        val mqtt = res.optJSONObject("mqtt") ?: return false
+
         RemoteConfig.saveEnrollment(context, deviceId, token)
+        RemoteConfig.saveMqtt(
+            context,
+            url = mqtt.getString("url"),
+            username = mqtt.getString("username"),
+            password = mqtt.getString("password"),
+            commandTopic = mqtt.getString("commandTopic"),
+            ackTopic = mqtt.getString("ackTopic"),
+            locationTopic = mqtt.getString("locationTopic"),
+        )
         return true
+    }
+
+    /** Log in with the device @rmsoft.rw account; returns the access token or null. */
+    private fun login(): String? {
+        val body = JSONObject()
+            .put("email", RemoteConfig.enrollEmail(context))
+            .put("password", RemoteConfig.enrollPassword(context))
+        val res = request("POST", "/api/auth/login", body, auth = false) ?: return null
+        return res.optString("accessToken").ifBlank { null }
+    }
+
+    /** Real hardware serial — readable because RMLauncher is Device Owner (else null). */
+    private fun hardwareSerial(): String? = try {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) android.os.Build.getSerial()
+        else @Suppress("DEPRECATION") android.os.Build.SERIAL
+    } catch (e: SecurityException) {
+        null
+    }
+
+    /**
+     * Stable device identity. Prefers the real hardware serial (constant across factory resets, so a
+     * wiped + re-enrolled phone is the SAME record instead of a duplicate); falls back to ANDROID_ID.
+     */
+    private fun deviceSerial(): String {
+        hardwareSerial()?.takeIf { it.isNotBlank() && it != "unknown" }?.let { return it }
+        return android.provider.Settings.Secure.getString(
+            context.contentResolver,
+            android.provider.Settings.Secure.ANDROID_ID,
+        ) ?: "unknown-${android.os.Build.DISPLAY}"
     }
 
     /** Poll for pending commands (server marks them sent). */
@@ -106,16 +155,25 @@ class MdmApi(private val context: Context) {
     private fun post(path: String, body: JSONObject, auth: Boolean = true): JSONObject? =
         request("POST", path, body, auth)
 
-    private fun request(method: String, path: String, body: JSONObject?, auth: Boolean): JSONObject? {
+    /**
+     * [auth] attaches the persisted device token; [bearer] attaches an explicit token (used during
+     * enrollment, before the token is saved). Pass one or the other.
+     */
+    private fun request(
+        method: String,
+        path: String,
+        body: JSONObject?,
+        auth: Boolean,
+        bearer: String? = null,
+    ): JSONObject? {
         return runCatching {
             val conn = (URL(base + path).openConnection() as HttpURLConnection).apply {
                 requestMethod = method
                 connectTimeout = 10_000
                 readTimeout = 10_000
                 setRequestProperty("Content-Type", "application/json")
-                if (auth) RemoteConfig.deviceToken(context)?.let {
-                    setRequestProperty("Authorization", "Bearer $it")
-                }
+                val authToken = bearer ?: if (auth) RemoteConfig.deviceToken(context) else null
+                authToken?.let { setRequestProperty("Authorization", "Bearer $it") }
                 if (body != null) {
                     doOutput = true
                     outputStream.use { it.write(body.toString().toByteArray()) }

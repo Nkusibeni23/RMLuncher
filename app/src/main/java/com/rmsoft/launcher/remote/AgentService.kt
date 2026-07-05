@@ -1,7 +1,6 @@
 package com.rmsoft.launcher.remote
 
 import android.Manifest
-import android.app.ActivityManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -11,13 +10,10 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationManager
-import android.os.BatteryManager
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.content.ContextCompat
-import com.rmsoft.launcher.utils.AppWhitelist
-import com.rmsoft.launcher.utils.DeviceOwnerManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -27,110 +23,116 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
- * Foreground service that runs the MDM device agent loop: ensure enrolled → poll for commands →
- * execute via [CommandExecutor] → ack → report telemetry, every [RemoteConfig.POLL_INTERVAL_MS].
+ * Foreground service that runs the MDM device agent over **MQTT** (real-time push) instead of the
+ * old 15s HTTP poll: enroll once → connect to rmsoft-server's broker → receive commands instantly →
+ * execute via [CommandExecutor] → ack, and pulse a heartbeat + location so the RMSoft dashboard
+ * shows the device online and locatable.
  *
- * Started on boot and from the launcher. Polling (rather than push) is used because the sealed
- * kiosk cannot accept inbound connections — see the platform README.
+ * Started on boot and from the launcher. [MdmApi] is still used for the one-time HTTP enrollment
+ * (which hands back the MQTT creds); everything after that flows over the persistent MQTT link.
  */
 class AgentService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val api by lazy { MdmApi(this) }
     private val executor by lazy { CommandExecutor(this) }
-    private var ticks = 0
+    private val mqtt by lazy { MqttManager(this) }
 
     override fun onCreate() {
         super.onCreate()
         startForeground(NOTIF_ID, buildNotification())
-        scope.launch { loop() }
+        scope.launch { runAgent() }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
 
-    private suspend fun loop() {
+    private suspend fun runAgent() {
+        // 1. Enroll once (HTTP) until rmsoft-server hands us MQTT creds. Retries on failure.
+        while (scope.isActive && !RemoteConfig.hasMqtt(this)) {
+            runCatching { ensureEnrolled() }.onFailure { Log.w(TAG, "enroll failed: ${it.message}") }
+            if (!RemoteConfig.hasMqtt(this)) delay(ENROLL_RETRY_MS)
+        }
+        if (!scope.isActive) return
+
+        // 2. Connect the MQTT push channel; commands are handled the instant they arrive.
+        mqtt.setCommandListener { cmd -> scope.launch { handleCommand(cmd) } }
+        mqtt.connect()
+
+        // 3. Heartbeat + location pulse so the dashboard shows online + locatable.
         while (scope.isActive) {
-            runCatching { tick() }.onFailure { Log.w(TAG, "agent tick failed: ${it.message}") }
-            delay(RemoteConfig.POLL_INTERVAL_MS)
+            if (mqtt.isConnected) {
+                mqtt.publishHeartbeat()
+                publishLocationBestEffort()
+            } else {
+                mqtt.connect() // no-op if already connecting/connected; recovers a dropped link
+            }
+            delay(HEARTBEAT_INTERVAL_MS)
         }
     }
 
-    private fun tick() {
-        // 1. Enroll once if we have no token yet.
-        if (!RemoteConfig.isEnrolled(this)) {
-            val ok = api.enroll(
-                name = "${Build.MANUFACTURER} ${Build.MODEL}",
-                model = "${Build.MANUFACTURER} ${Build.MODEL}",
-                androidSdk = Build.VERSION.SDK_INT,
-                appVersion = appVersion(),
-            )
-            if (!ok) return // try again next tick
-        }
-
-        // 2. Pull + execute + ack any pending commands.
-        api.fetchCommands().forEach { cmd ->
-            val result = executor.execute(cmd)
-            api.ack(cmd.id, result.success, result.message)
-        }
-
-        // 3. Report telemetry.
-        val owner = DeviceOwnerManager(this)
-        val location = lastKnownLocation()
-        api.postTelemetry(
-            battery = batteryPercent(),
-            deviceOwner = owner.isDeviceOwner(),
-            lockTaskActive = lockTaskActive(),
-            statusBarDisabled = owner.isStatusBarDisabled(),
-            cameraDisabled = owner.isCameraDisabled(),
-            keyguardDisabled = owner.isKeyguardDisabled(),
-            restrictions = owner.activeUserRestrictions(),
-            lat = location?.latitude,
-            lng = location?.longitude,
+    private fun ensureEnrolled() {
+        if (RemoteConfig.hasMqtt(this)) return
+        // MdmApi.enroll posts to rmsoft-server and, on success, saves the MQTT creds into RemoteConfig.
+        api.enroll(
+            name = "${Build.MANUFACTURER} ${Build.MODEL}",
+            model = "${Build.MANUFACTURER} ${Build.MODEL}",
+            androidSdk = Build.VERSION.SDK_INT,
             appVersion = appVersion(),
-            whitelist = AppWhitelist.getWhitelistedPackages(this),
         )
+    }
 
-        // 3b. Upload the installed-app inventory for the dashboard picker — on the first tick and
-        // then every ~5 minutes (it changes rarely; no need to send it every poll).
-        if (ticks % 20 == 0) {
-            runCatching { api.postApps(com.rmsoft.launcher.utils.AppInventory.list(this)) }
-                .onFailure { Log.w(TAG, "app inventory upload failed: ${it.message}") }
+    // ─── Command handling ────────────────────────────────────────────────────────
+
+    private suspend fun handleCommand(cmd: MdmApi.RemoteCommand) {
+        when (cmd.type) {
+            "LOCATE_NOW" -> {
+                val loc = freshFixOrLastKnown()
+                if (loc != null) {
+                    mqtt.publishLocation(loc.latitude, loc.longitude, loc.accuracy)
+                    mqtt.publishAck(cmd.id, true, "location sent")
+                } else {
+                    mqtt.publishAck(cmd.id, false, "no location available")
+                }
+            }
+            "WIPE", "FACTORY_RESET" -> {
+                // wipeDevice() tears down the process immediately, so ack FIRST and give the MQTT
+                // client a moment to flush. If the wipe itself throws (executor catches it), the
+                // process survives and we send a failure ack so the dashboard shows the truth.
+                mqtt.publishAck(cmd.id, true, "wipe started")
+                delay(1200)
+                val r = executor.execute(cmd)
+                if (!r.success) mqtt.publishAck(cmd.id, false, r.message)
+            }
+            else -> {
+                val r = executor.execute(cmd)
+                mqtt.publishAck(cmd.id, r.success, if (r.success) null else r.message)
+            }
         }
-        ticks++
-
-        // 4. Commit any staged server-URL switch now that the ack + telemetry above have reached
-        // the old server. The next tick polls the new URL (and re-enrolls if requested).
-        RemoteConfig.applyPendingServer(this)?.let { Log.i(TAG, "server endpoint switched → $it") }
     }
 
-    // ─── Telemetry helpers ──────────────────────────────────────────────────────
+    // ─── Location ────────────────────────────────────────────────────────────────
 
-    private fun batteryPercent(): Int =
-        (getSystemService(Context.BATTERY_SERVICE) as BatteryManager)
-            .getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
-
-    private fun lockTaskActive(): Boolean {
-        val am = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-        return am.lockTaskModeState != ActivityManager.LOCK_TASK_MODE_NONE
-    }
-
-    /** Freshest fix observed via [requestFreshFix], updated asynchronously between ticks. */
     @Volatile
     private var cachedFix: Location? = null
 
-    /**
-     * Best fix to report: the newest of every provider's last-known position and the most recent
-     * actively-requested fix ([cachedFix]). Returns null if location permission is absent (Device
-     * Owner auto-grants it via [DeviceOwnerManager.applyAllPolicies]) or nothing has produced a fix
-     * yet. Also kicks off [requestFreshFix] so a sealed kiosk — which runs no other location app to
-     * warm the providers — still produces a position on subsequent ticks.
-     */
-    private fun lastKnownLocation(): Location? {
-        val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
+    private fun hasLocationPermission(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
             PackageManager.PERMISSION_GRANTED ||
             ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) ==
             PackageManager.PERMISSION_GRANTED
-        if (!granted) return null
+
+    private fun publishLocationBestEffort() {
+        val loc = freshFixOrLastKnown() ?: return
+        if (mqtt.isConnected) mqtt.publishLocation(loc.latitude, loc.longitude, loc.accuracy)
+    }
+
+    /**
+     * Newest of every provider's last-known position and the most recent actively-requested fix.
+     * Also kicks off a fresh request so a sealed kiosk — which runs no other location app — still
+     * produces a position. Null if permission is absent or nothing has produced a fix yet.
+     */
+    private fun freshFixOrLastKnown(): Location? {
+        if (!hasLocationPermission()) return null
         val lm = getSystemService(Context.LOCATION_SERVICE) as LocationManager
         requestFreshFix(lm)
         return runCatching {
@@ -141,11 +143,6 @@ class AgentService : Service() {
         }.getOrNull()
     }
 
-    /**
-     * Ask each enabled provider for a single current fix and cache the result for the next telemetry
-     * cycle. Async + best-effort so it never blocks the agent loop. API 30+ ([LocationManager
-     * .getCurrentLocation]); on older devices last-known alone is used.
-     */
     private fun requestFreshFix(lm: LocationManager) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
         runCatching {
@@ -169,7 +166,7 @@ class AgentService : Service() {
             val mgr = getSystemService(NotificationManager::class.java)
             if (mgr.getNotificationChannel(CHANNEL) == null) {
                 mgr.createNotificationChannel(
-                    NotificationChannel(CHANNEL, "RMSOFT Agent", NotificationManager.IMPORTANCE_MIN)
+                    NotificationChannel(CHANNEL, "RMSOFT Agent", NotificationManager.IMPORTANCE_MIN),
                 )
             }
             return Notification.Builder(this, CHANNEL)
@@ -189,6 +186,7 @@ class AgentService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        runCatching { mqtt.disconnect() }
         scope.cancel()
     }
 
@@ -198,6 +196,8 @@ class AgentService : Service() {
         private const val TAG = "RMSOFTAgent"
         private const val CHANNEL = "rmsoft_agent"
         private const val NOTIF_ID = 4711
+        private const val HEARTBEAT_INTERVAL_MS = 60_000L // 1 min — responsive online status
+        private const val ENROLL_RETRY_MS = 15_000L
 
         /** Start the agent if it isn't already running. Safe to call repeatedly. */
         fun start(context: Context) {

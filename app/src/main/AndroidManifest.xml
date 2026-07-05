@@ -13,10 +13,20 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- The agent maintains a persistent MQTT link (dataSync) AND reports GPS (location) for Track. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Location reporting in telemetry (auto-granted by Device Owner). -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <!-- eSIM-only enforcement: read the SIM list, then disable physical SIMs. MODIFY_PHONE_STATE is
+         a privileged/system permission — granted only when RMLauncher is baked into RMSoft OS as a
+         privileged system app (allowlisted). SimPolicy no-ops safely without it. -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission
+        android:name="android.permission.MODIFY_PHONE_STATE"
+        tools:ignore="ProtectedPermissions" />
 
     <!--
       Package visibility (Android 11+). We deliberately do NOT use QUERY_ALL_PACKAGES — Play Protect
@@ -154,7 +164,7 @@
         <service
             android:name=".remote.AgentService"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="dataSync|location" />
 
         <!--
           Device Owner admin receiver. Drives Lock Task (kiosk) Mode and all lockdown policies,

@@ -78,6 +78,12 @@ class DeviceOwnerManager(context: Context) {
         purgeNonWhitelistedUserApps()
         grantRuntimePermissions()
         enableLocationServices()
+
+        // RMSoft OS security rule: eSIM-only. Disable any physical SIM so a stolen phone can't be
+        // fitted with a new physical SIM to evade tracking. No-op unless we hold the privileged
+        // MODIFY_PHONE_STATE (baked system app) — see SimPolicy.
+        runCatching { SimPolicy.enforceEsimOnly(appContext) }
+            .onSuccess { android.util.Log.i("DeviceOwnerManager", "eSIM-only: $it") }
     }
 
     /**

@@ -97,6 +97,33 @@ class CommandExecutor(private val context: Context) {
                     owner.factoryReset(p.bool("wipeExternalStorage"))
                     ok("wipe started")
                 }
+
+                // ─── Anti-theft vocabulary from the RMSoft green dashboard (rmsoft-server) ───
+                // These alias / extend the enterprise commands above so one agent serves both the
+                // kiosk console and the Find-My-Phone dashboard.
+                "LOCK" -> { owner.lockNow(); ok("locked") }
+                "UNLOCK" -> {
+                    // We can't remotely dismiss a secure keyguard (by design), but UNLOCK doubles as
+                    // "cancel" — it silences an active RING. Ack so the dashboard clears the state.
+                    Ringer.stop(context)
+                    ok("unlock acknowledged")
+                }
+                "WIPE" -> {
+                    // Dashboard sends { confirm, everything } — "everything" also wipes external storage.
+                    owner.factoryReset(p.bool("everything"))
+                    ok("wipe started")
+                }
+                "MESSAGE" -> {
+                    MessageActivity.show(context, p.optString("title"), p.optString("message"))
+                    ok("message shown")
+                }
+                "RING" -> {
+                    val duration = p.optLong("durationMs", Ringer.DEFAULT_DURATION_MS)
+                    Ringer.start(context, duration)
+                    ok("ringing")
+                }
+                // LOCATE_NOW is handled in AgentService (it owns the MQTT link + location provider).
+
                 else -> Result(false, "unknown command: ${cmd.type}")
             }
         }.getOrElse { Result(false, "error: ${it.message}") }

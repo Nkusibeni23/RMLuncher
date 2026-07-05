@@ -11,11 +11,18 @@ import android.content.Context
  */
 object RemoteConfig {
 
-    /** Base URL of the rmsoft-mdm server, e.g. https://mdm.rmsoft.example. No trailing slash. */
-    const val DEFAULT_SERVER_URL = "https://mdm.tugane.com"
+    /** Base URL of the RMSoft MDM server (rmsoft-server on Railway). No trailing slash. */
+    const val DEFAULT_SERVER_URL = "https://aosp-production.up.railway.app"
 
     /** Shared secret required to enroll — must equal the server's ENROLLMENT_SECRET. */
     const val DEFAULT_ENROLLMENT_SECRET = "rmsoft-enroll-d2a1e709424b3794"
+
+    // Enrollment login. rmsoft-server enforces an @rmsoft.rw account (ALLOWED_EMAIL_DOMAIN), so the
+    // agent logs in with a device/service account to get a JWT, then enrolls. These are intentionally
+    // BLANK by default — inject them once via the QR provisioning bundle (EXTRA_ENROLL_*) or
+    // setEnrollCredentials(); never hardcode a real password in source.
+    const val DEFAULT_ENROLL_EMAIL = ""
+    const val DEFAULT_ENROLL_PASSWORD = ""
 
     /** How often the agent polls the server for commands + posts telemetry. */
     const val POLL_INTERVAL_MS = 15_000L
@@ -29,6 +36,17 @@ object RemoteConfig {
     private const val KEY_PENDING_SERVER = "pending_server_url"
     private const val KEY_PENDING_REENROLL = "pending_server_reenroll"
 
+    // MQTT connection creds + topics, handed to us by rmsoft-server at enrollment. These drive the
+    // real-time push channel (MqttManager); the HTTP poll fields above stay as a fallback/enroll.
+    private const val KEY_MQTT_URL = "mqtt_url"
+    private const val KEY_MQTT_USER = "mqtt_username"
+    private const val KEY_MQTT_PASS = "mqtt_password"
+    private const val KEY_TOPIC_CMD = "topic_commands"
+    private const val KEY_TOPIC_ACK = "topic_acks"
+    private const val KEY_TOPIC_LOC = "topic_location"
+    private const val KEY_ENROLL_EMAIL = "enroll_email"
+    private const val KEY_ENROLL_PASSWORD = "enroll_password"
+
     /**
      * Keys read from the QR / NFC provisioning admin-extras bundle
      * (`PROVISIONING_ADMIN_EXTRAS_BUNDLE`). Supplying these lets one signed APK enroll against any
@@ -38,6 +56,24 @@ object RemoteConfig {
     const val EXTRA_SERVER_URL = "serverUrl"
     const val EXTRA_ENROLLMENT_SECRET = "enrollmentSecret"
     const val EXTRA_FACILITY = "facility"
+    const val EXTRA_ENROLL_EMAIL = "enrollEmail"
+    const val EXTRA_ENROLL_PASSWORD = "enrollPassword"
+
+    /** Device/service @rmsoft.rw account the agent logs in with to enroll (blank until provisioned). */
+    fun enrollEmail(context: Context): String =
+        prefs(context).getString(KEY_ENROLL_EMAIL, null) ?: DEFAULT_ENROLL_EMAIL
+    fun enrollPassword(context: Context): String =
+        prefs(context).getString(KEY_ENROLL_PASSWORD, null) ?: DEFAULT_ENROLL_PASSWORD
+
+    fun setEnrollCredentials(context: Context, email: String, password: String) {
+        prefs(context).edit()
+            .putString(KEY_ENROLL_EMAIL, email.trim())
+            .putString(KEY_ENROLL_PASSWORD, password)
+            .apply()
+    }
+
+    fun hasEnrollCredentials(context: Context): Boolean =
+        enrollEmail(context).isNotBlank() && enrollPassword(context).isNotBlank()
 
     fun serverUrl(context: Context): String =
         prefs(context).getString(KEY_SERVER, null) ?: DEFAULT_SERVER_URL
@@ -60,6 +96,42 @@ object RemoteConfig {
             .putString(KEY_TOKEN, token)
             .apply()
     }
+
+    // ─── MQTT (real-time push) ────────────────────────────────────────────────────
+
+    /** Persist the MQTT creds + topics returned by rmsoft-server at enrollment. */
+    fun saveMqtt(
+        context: Context,
+        url: String,
+        username: String,
+        password: String,
+        commandTopic: String,
+        ackTopic: String,
+        locationTopic: String,
+    ) {
+        prefs(context).edit()
+            .putString(KEY_MQTT_URL, url)
+            .putString(KEY_MQTT_USER, username)
+            .putString(KEY_MQTT_PASS, password)
+            .putString(KEY_TOPIC_CMD, commandTopic)
+            .putString(KEY_TOPIC_ACK, ackTopic)
+            .putString(KEY_TOPIC_LOC, locationTopic)
+            .apply()
+    }
+
+    fun mqttUrl(context: Context): String? = prefs(context).getString(KEY_MQTT_URL, null)
+    fun mqttUsername(context: Context): String? = prefs(context).getString(KEY_MQTT_USER, null)
+    fun mqttPassword(context: Context): String? = prefs(context).getString(KEY_MQTT_PASS, null)
+    fun commandTopic(context: Context): String? = prefs(context).getString(KEY_TOPIC_CMD, null)
+    fun ackTopic(context: Context): String? = prefs(context).getString(KEY_TOPIC_ACK, null)
+    fun locationTopic(context: Context): String? = prefs(context).getString(KEY_TOPIC_LOC, null)
+
+    /** Heartbeat topic follows the device id: device/{id}/heartbeat. */
+    fun heartbeatTopic(context: Context): String? =
+        deviceId(context)?.let { "device/$it/heartbeat" }
+
+    /** True once the MQTT push channel is provisioned (creds present). */
+    fun hasMqtt(context: Context): Boolean = mqttUrl(context) != null && commandTopic(context) != null
 
     /** Drop the stored device identity so the agent re-enrolls on its next poll. */
     fun clearEnrollment(context: Context) {
@@ -92,6 +164,11 @@ object RemoteConfig {
             ?.let { editor.putString(KEY_SECRET, it) }
         extras.getString(EXTRA_FACILITY)?.trim()?.takeIf { it.isNotEmpty() }
             ?.let { editor.putString(KEY_FACILITY, it) }
+        // Enrollment login carried in the QR bundle so a fleet phone enrolls with no typing.
+        extras.getString(EXTRA_ENROLL_EMAIL)?.trim()?.takeIf { it.isNotEmpty() }
+            ?.let { editor.putString(KEY_ENROLL_EMAIL, it) }
+        extras.getString(EXTRA_ENROLL_PASSWORD)?.takeIf { it.isNotEmpty() }
+            ?.let { editor.putString(KEY_ENROLL_PASSWORD, it) }
         editor.apply()
     }
 
