@@ -17,8 +17,11 @@ android {
         applicationId "com.rmsoft.launcher"
         minSdk 26
         targetSdk 35
-        versionCode 1
-        versionName "1.0.0"
+        // Overridable for Play uploads (each upload needs a higher versionCode):
+        //   ./gradlew bundleRelease -Pvc=2 -Pvn=1.0.1
+        // Local/dev builds use the defaults below.
+        versionCode project.hasProperty('vc') ? project.property('vc').toString().toInteger() : 1
+        versionName project.hasProperty('vn') ? project.property('vn').toString() : '1.0.0'
     }
 
     signingConfigs {
