@@ -30,8 +30,9 @@ class RMSOFTAdminReceiver : DeviceAdminReceiver() {
     /** Called once the admin is activated (manual enable or post-provisioning). */
     override fun onEnabled(context: Context, intent: Intent) {
         super.onEnabled(context, intent)
-        Log.i(TAG, "Device admin enabled — asserting kiosk policies.")
-        DeviceOwnerManager(context).applyAllPolicies()
+        Log.i(TAG, "Device admin enabled — applying baseline (non-kiosk) policies.")
+        DeviceOwnerManager(context).applyBaselinePolicies()
+        com.rmsoft.launcher.remote.AgentService.start(context)
     }
 
     /**
@@ -52,19 +53,10 @@ class RMSOFTAdminReceiver : DeviceAdminReceiver() {
         )
         RemoteConfig.applyProvisioningExtras(context, extras)
 
-        // Seed this device's real stock-app packages before the first policy sweep so the kiosk grid
-        // and lock-task allow-list are correct from the very first boot.
-        AppWhitelist.seedStockApps(context)
-
-        val owner = DeviceOwnerManager(context)
-        owner.applyAllPolicies()
-        owner.setAsDefaultHome()
-
-        // Drop straight into the locked launcher.
-        val launch = Intent(context, LauncherActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK)
-        runCatching { context.startActivity(launch) }
+        // Background-agent mode: apply baseline (non-kiosk) policies + start the silent MDM agent.
+        // RMSoft OS keeps its normal launcher — we do NOT become Home or lock the device.
+        DeviceOwnerManager(context).applyBaselinePolicies()
+        com.rmsoft.launcher.remote.AgentService.start(context)
     }
 
     /**

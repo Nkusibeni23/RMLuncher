@@ -70,26 +70,19 @@
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:theme="@style/Theme.RMSOFTLauncher"
-        android:persistent="true"
         tools:ignore="UnusedAttribute">
 
-        <!-- Main Launcher Activity -->
+        <!-- Background-agent mode: RMSoft OS keeps its normal launcher; this app is an INVISIBLE
+             MDM agent (no HOME role, no launcher icon). The old kiosk LauncherActivity is retained
+             but not registered as a launcher/home — it's only used if kiosk mode is ever enabled. -->
         <activity
             android:name=".ui.LauncherActivity"
-            android:exported="true"
+            android:exported="false"
             android:launchMode="singleTask"
             android:stateNotNeeded="true"
             android:resumeWhilePausing="true"
             android:screenOrientation="portrait"
-            android:windowSoftInputMode="adjustPan">
-            <intent-filter android:priority="999">
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.HOME" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.MONKEY" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
+            android:windowSoftInputMode="adjustPan" />
 
         <!-- Custom restricted Settings screen -->
         <activity
@@ -143,7 +136,17 @@
             </intent-filter>
         </activity>
 
-        <!-- Boot receiver to restart launcher if killed -->
+        <!-- Hidden entry: dial *#*#767638#*#* (RMSOFT) to open the enrollment/login screen. -->
+        <receiver
+            android:name=".remote.SecretCodeReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.provider.Telephony.SECRET_CODE" />
+                <data android:scheme="android_secret_code" android:host="767638" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Boot receiver: start the MDM agent on boot / after self-update -->
         <receiver
             android:name=".utils.BootReceiver"
             android:exported="true">

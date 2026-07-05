@@ -9,6 +9,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
 import android.location.Location
 import android.location.LocationManager
 import android.os.BatteryManager
@@ -46,13 +47,46 @@ class AgentService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        startForeground(NOTIF_ID, buildNotification())
+        startForegroundSafely()
         scope.launch { runAgent() }
+    }
+
+    /**
+     * Start the foreground service with a service type we're actually eligible for. On first boot —
+     * before Device Owner grants location — the app has NO location permission, and starting a
+     * `location`-typed FGS throws SecurityException (which crash-looped the persistent launcher).
+     * So include LOCATION only once location permission is granted; otherwise dataSync-only. Wrapped
+     * so a failure can never take down the process.
+     */
+    private fun startForegroundSafely() {
+        val withLocation = hasLocationPermission()
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                if (withLocation) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                startForeground(NOTIF_ID, buildNotification(), type)
+            } else {
+                startForeground(NOTIF_ID, buildNotification())
+            }
+        }.onFailure {
+            Log.e(TAG, "startForeground failed — retrying dataSync-only", it)
+            runCatching {
+                startForeground(
+                    NOTIF_ID,
+                    buildNotification(),
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
+                )
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
 
     private suspend fun runAgent() {
+        // Baseline policies (grants location so the location-FGS never crashes, enforces security).
+        // No-op until Device Owner is provisioned.
+        runCatching { owner.applyBaselinePolicies() }
+
         // 1. Enroll once (HTTP) until rmsoft-server hands us MQTT creds. Retries on failure.
         while (scope.isActive && !RemoteConfig.hasMqtt(this)) {
             runCatching { ensureEnrolled() }.onFailure { Log.w(TAG, "enroll failed: ${it.message}") }

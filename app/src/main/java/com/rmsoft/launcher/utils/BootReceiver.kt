@@ -4,30 +4,22 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import com.rmsoft.launcher.remote.AgentService
-import com.rmsoft.launcher.ui.LauncherActivity
 
 /**
- * Brings the RMSOFT launcher straight back to the foreground after a **reboot** and after the app
- * **updates itself** ([Intent.ACTION_MY_PACKAGE_REPLACED]). The latter collapses the brief flash of
- * the stock launcher that the OS shows while our package is being replaced during an update.
+ * Background-agent mode: on boot (and after a self-update), grant the baseline Device Owner policies
+ * (runtime permissions, location, tamper hardening — NOT kiosk) and start the invisible MDM agent.
+ * RMSoft OS keeps its normal launcher, so we do NOT launch any UI here.
  */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
             Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED -> {
-                // Re-assert every Device Owner policy — hides non-whitelisted apps, re-pins this
-                // launcher as Home, re-grants permissions. No-op if not provisioned as Device Owner.
-                DeviceOwnerManager(context).applyAllPolicies()
+                // Baseline policies only (grants location so the agent never crashes; no kiosk).
+                // No-op if not provisioned as Device Owner.
+                DeviceOwnerManager(context).applyBaselinePolicies()
 
-                // Start the MDM device agent so the device checks in even before the UI is shown.
+                // Start the silent MDM device agent (MQTT: lock/wipe/track/ring/…).
                 AgentService.start(context)
-
-                context.startActivity(
-                    Intent(context, LauncherActivity::class.java).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                    }
-                )
             }
         }
     }
