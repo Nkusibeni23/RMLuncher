@@ -146,17 +146,29 @@ class MqttManager(private val context: Context) {
     /** Push a location fix to the device's location topic (Track / LOCATE_NOW). */
     fun publishLocation(lat: Double, lng: Double, accuracy: Float? = null) {
         val topic = RemoteConfig.locationTopic(context) ?: return
+        // Field names must match rmsoft-server's handleLocation: latitude/longitude/accuracyM.
         val body = JSONObject()
-            .put("lat", lat)
-            .put("lng", lng)
-        if (accuracy != null) body.put("accuracy", accuracy.toDouble())
+            .put("latitude", lat)
+            .put("longitude", lng)
+            .put("source", "agent")
+        if (accuracy != null) body.put("accuracyM", accuracy.toDouble())
         publish(topic, body.toString())
     }
 
-    /** Heartbeat so the dashboard shows the device online. */
-    fun publishHeartbeat() {
+    /** Heartbeat so the dashboard shows the device online; carries live telemetry when provided. */
+    fun publishHeartbeat(telemetry: JSONObject? = null) {
         val topic = RemoteConfig.heartbeatTopic(context) ?: return
-        publish(topic, JSONObject().put("ts", System.currentTimeMillis()).toString())
+        val body = JSONObject().put("ts", System.currentTimeMillis())
+        telemetry?.keys()?.forEach { k -> body.put(k, telemetry.get(k)) }
+        publish(topic, body.toString())
+    }
+
+    /** Anti-theft alert (e.g. SIM_SWAP) to device/{id}/events — server escalates to LOST. */
+    fun publishEvent(type: String, info: String? = null) {
+        val deviceId = RemoteConfig.deviceId(context) ?: return
+        val body = JSONObject().put("type", type)
+        if (info != null) body.put("info", info)
+        publish("device/$deviceId/events", body.toString())
     }
 
     fun publish(topic: String, payload: String, qos: Int = 1) {

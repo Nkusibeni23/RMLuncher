@@ -79,6 +79,13 @@ class CommandExecutor(private val context: Context) {
                         Result(true, ApkInstaller.installFromUrl(context, url, RemoteConfig.serverUrl(context)))
                     }
                 }
+                "UPDATE_APP" -> {
+                    // OTA self-update: install a newer APK of an existing package (same signature).
+                    // PackageInstaller upgrades in place; ApkInstallReceiver skips our own package.
+                    val url = p.optString("url")
+                    if (url.isBlank()) Result(false, "missing url")
+                    else Result(true, ApkInstaller.installFromUrl(context, url, RemoteConfig.serverUrl(context)))
+                }
                 "SHOW_MESSAGE" -> {
                     MessageActivity.show(context, p.optString("title"), p.optString("message"))
                     ok("message shown")

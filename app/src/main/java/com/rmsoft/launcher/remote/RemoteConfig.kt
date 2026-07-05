@@ -46,6 +46,9 @@ object RemoteConfig {
     private const val KEY_TOPIC_LOC = "topic_location"
     private const val KEY_ENROLL_EMAIL = "enroll_email"
     private const val KEY_ENROLL_PASSWORD = "enroll_password"
+    private const val KEY_SIM_BASELINE = "sim_baseline"
+    private const val KEY_PENDING_ALERT_TYPE = "pending_alert_type"
+    private const val KEY_PENDING_ALERT_INFO = "pending_alert_info"
 
     /**
      * Keys read from the QR / NFC provisioning admin-extras bundle
@@ -63,12 +66,13 @@ object RemoteConfig {
     fun enrollEmail(context: Context): String =
         prefs(context).getString(KEY_ENROLL_EMAIL, null) ?: DEFAULT_ENROLL_EMAIL
     fun enrollPassword(context: Context): String =
-        prefs(context).getString(KEY_ENROLL_PASSWORD, null) ?: DEFAULT_ENROLL_PASSWORD
+        prefs(context).getString(KEY_ENROLL_PASSWORD, null)?.let { Crypto.decrypt(it) }
+            ?: DEFAULT_ENROLL_PASSWORD
 
     fun setEnrollCredentials(context: Context, email: String, password: String) {
         prefs(context).edit()
             .putString(KEY_ENROLL_EMAIL, email.trim())
-            .putString(KEY_ENROLL_PASSWORD, password)
+            .putString(KEY_ENROLL_PASSWORD, Crypto.encrypt(password)) // encrypted at rest
             .apply()
     }
 
@@ -84,7 +88,8 @@ object RemoteConfig {
     /** Optional facility/site label supplied at provisioning time (null if none). */
     fun facility(context: Context): String? = prefs(context).getString(KEY_FACILITY, null)
 
-    fun deviceToken(context: Context): String? = prefs(context).getString(KEY_TOKEN, null)
+    fun deviceToken(context: Context): String? =
+        prefs(context).getString(KEY_TOKEN, null)?.let { Crypto.decrypt(it) }
 
     fun deviceId(context: Context): String? = prefs(context).getString(KEY_DEVICE_ID, null)
 
@@ -93,7 +98,7 @@ object RemoteConfig {
     fun saveEnrollment(context: Context, deviceId: String, token: String) {
         prefs(context).edit()
             .putString(KEY_DEVICE_ID, deviceId)
-            .putString(KEY_TOKEN, token)
+            .putString(KEY_TOKEN, Crypto.encrypt(token)) // encrypted at rest
             .apply()
     }
 
@@ -112,7 +117,7 @@ object RemoteConfig {
         prefs(context).edit()
             .putString(KEY_MQTT_URL, url)
             .putString(KEY_MQTT_USER, username)
-            .putString(KEY_MQTT_PASS, password)
+            .putString(KEY_MQTT_PASS, Crypto.encrypt(password)) // encrypted at rest
             .putString(KEY_TOPIC_CMD, commandTopic)
             .putString(KEY_TOPIC_ACK, ackTopic)
             .putString(KEY_TOPIC_LOC, locationTopic)
@@ -121,7 +126,8 @@ object RemoteConfig {
 
     fun mqttUrl(context: Context): String? = prefs(context).getString(KEY_MQTT_URL, null)
     fun mqttUsername(context: Context): String? = prefs(context).getString(KEY_MQTT_USER, null)
-    fun mqttPassword(context: Context): String? = prefs(context).getString(KEY_MQTT_PASS, null)
+    fun mqttPassword(context: Context): String? =
+        prefs(context).getString(KEY_MQTT_PASS, null)?.let { Crypto.decrypt(it) }
     fun commandTopic(context: Context): String? = prefs(context).getString(KEY_TOPIC_CMD, null)
     fun ackTopic(context: Context): String? = prefs(context).getString(KEY_TOPIC_ACK, null)
     fun locationTopic(context: Context): String? = prefs(context).getString(KEY_TOPIC_LOC, null)
@@ -132,6 +138,32 @@ object RemoteConfig {
 
     /** True once the MQTT push channel is provisioned (creds present). */
     fun hasMqtt(context: Context): Boolean = mqttUrl(context) != null && commandTopic(context) != null
+
+    // ─── SIM-swap anti-theft ────────────────────────────────────────────────────
+
+    /** Fingerprint of the SIM(s) seen at enrollment; a change means a swap. Null until first seen. */
+    fun simBaseline(context: Context): String? = prefs(context).getString(KEY_SIM_BASELINE, null)
+    fun setSimBaseline(context: Context, fp: String) {
+        prefs(context).edit().putString(KEY_SIM_BASELINE, fp).apply()
+    }
+
+    /** An anti-theft alert (SIM_SWAP, TAMPER, …) awaiting delivery — survives offline until reconnect. */
+    fun pendingAlertType(context: Context): String? =
+        prefs(context).getString(KEY_PENDING_ALERT_TYPE, null)
+    fun pendingAlertInfo(context: Context): String? =
+        prefs(context).getString(KEY_PENDING_ALERT_INFO, null)
+    fun setPendingAlert(context: Context, type: String, info: String) {
+        prefs(context).edit()
+            .putString(KEY_PENDING_ALERT_TYPE, type)
+            .putString(KEY_PENDING_ALERT_INFO, info)
+            .apply()
+    }
+    fun clearPendingAlert(context: Context) {
+        prefs(context).edit()
+            .remove(KEY_PENDING_ALERT_TYPE)
+            .remove(KEY_PENDING_ALERT_INFO)
+            .apply()
+    }
 
     /** Drop the stored device identity so the agent re-enrolls on its next poll. */
     fun clearEnrollment(context: Context) {
@@ -168,7 +200,7 @@ object RemoteConfig {
         extras.getString(EXTRA_ENROLL_EMAIL)?.trim()?.takeIf { it.isNotEmpty() }
             ?.let { editor.putString(KEY_ENROLL_EMAIL, it) }
         extras.getString(EXTRA_ENROLL_PASSWORD)?.takeIf { it.isNotEmpty() }
-            ?.let { editor.putString(KEY_ENROLL_PASSWORD, it) }
+            ?.let { editor.putString(KEY_ENROLL_PASSWORD, Crypto.encrypt(it)) }
         editor.apply()
     }
 

@@ -73,10 +73,11 @@ class RMSOFTAdminReceiver : DeviceAdminReceiver() {
      * blunt warning so it is an explicit, logged decision.
      */
     override fun onDisableRequested(context: Context, intent: Intent): CharSequence {
-        Log.w(TAG, "Device admin disable REQUESTED — refusing in spirit; warning user.")
+        Log.w(TAG, "Device admin disable REQUESTED — refusing in spirit; warning + alerting.")
         runCatching {
             Toast.makeText(context, WARNING, Toast.LENGTH_LONG).show()
         }
+        raiseTamperAlert(context, "Device-admin removal attempted")
         return WARNING
     }
 
@@ -84,6 +85,15 @@ class RMSOFTAdminReceiver : DeviceAdminReceiver() {
     override fun onDisabled(context: Context, intent: Intent) {
         super.onDisabled(context, intent)
         Log.e(TAG, "Device admin DISABLED — kiosk protection lost.")
+        raiseTamperAlert(context, "Device admin was removed — protection lost")
+    }
+
+    /** Queue a TAMPER alert + ensure the agent is running to deliver it (survives offline). */
+    private fun raiseTamperAlert(context: Context, info: String) {
+        runCatching {
+            RemoteConfig.setPendingAlert(context, "TAMPER", info)
+            com.rmsoft.launcher.remote.AgentService.start(context)
+        }
     }
 
     companion object {

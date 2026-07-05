@@ -2,6 +2,7 @@ package com.rmsoft.launcher.utils
 
 import android.app.PendingIntent
 import android.app.admin.DevicePolicyManager
+import android.app.admin.SystemUpdatePolicy
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -84,6 +85,17 @@ class DeviceOwnerManager(context: Context) {
         // MODIFY_PHONE_STATE (baked system app) — see SimPolicy.
         runCatching { SimPolicy.enforceEsimOnly(appContext) }
             .onSuccess { android.util.Log.i("DeviceOwnerManager", "eSIM-only: $it") }
+
+        // Tamper hardening: block OEM/bootloader unlock so a thief can't flash away the RMSoft ROM,
+        // and block safe-boot (which would start the phone without our launcher/agent).
+        runCatching { dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_OEM_UNLOCK) }
+        runCatching { dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_SAFE_BOOT) }
+
+        // OTA: install approved system updates automatically (security patches / ROM OTA), so the
+        // fleet stays current without user action.
+        runCatching {
+            dpm.setSystemUpdatePolicy(adminComponent, SystemUpdatePolicy.createAutomaticInstallPolicy())
+        }
     }
 
     /**

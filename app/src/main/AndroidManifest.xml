@@ -107,6 +107,14 @@
             android:screenOrientation="portrait"
             android:theme="@style/Theme.RMSOFTLauncher.Settings" />
 
+        <!-- Branded first-boot @rmsoft.rw enrollment gate (shown when unenrolled). -->
+        <activity
+            android:name=".ui.EnrollmentActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:excludeFromRecents="true"
+            android:screenOrientation="portrait" />
+
         <!-- Full-screen alert for admin-pushed messages (SHOW_MESSAGE command) -->
         <activity
             android:name=".ui.MessageActivity"
@@ -157,6 +165,19 @@
             android:exported="false">
             <intent-filter>
                 <action android:name="com.rmsoft.launcher.APK_INSTALL_STATUS" />
+            </intent-filter>
+        </receiver>
+
+        <!--
+          Anti-theft SIM-swap watcher. On any SIM state change it re-checks the SIM against the
+          enrollment baseline; a swap locks the phone + queues a server alert. SIM_STATE_CHANGED is a
+          protected broadcast a privileged system app receives. Exported so the system can deliver it.
+        -->
+        <receiver
+            android:name=".remote.SimChangeReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.SIM_STATE_CHANGED" />
             </intent-filter>
         </receiver>
 

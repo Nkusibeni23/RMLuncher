@@ -1,6 +1,7 @@
 package com.rmsoft.launcher.remote
 
 import android.Manifest
+import android.app.ActivityManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -10,10 +11,14 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationManager
+import android.os.BatteryManager
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.content.ContextCompat
+import com.rmsoft.launcher.utils.DeviceOwnerManager
+import com.rmsoft.launcher.utils.SimGuard
+import org.json.JSONObject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -37,6 +42,7 @@ class AgentService : Service() {
     private val api by lazy { MdmApi(this) }
     private val executor by lazy { CommandExecutor(this) }
     private val mqtt by lazy { MqttManager(this) }
+    private val owner by lazy { DeviceOwnerManager(this) }
 
     override fun onCreate() {
         super.onCreate()
@@ -58,16 +64,45 @@ class AgentService : Service() {
         mqtt.setCommandListener { cmd -> scope.launch { handleCommand(cmd) } }
         mqtt.connect()
 
-        // 3. Heartbeat + location pulse so the dashboard shows online + locatable.
+        // Establish/verify the SIM baseline once enrolled (first run just records it).
+        runCatching { SimGuard.check(this) }
+
+        // 3. Heartbeat (with telemetry) + location pulse so the dashboard shows online, healthy,
+        //    and locatable — and flush any queued SIM-swap alert.
         while (scope.isActive) {
             if (mqtt.isConnected) {
-                mqtt.publishHeartbeat()
+                mqtt.publishHeartbeat(buildTelemetry())
                 publishLocationBestEffort()
+                flushPendingAlert()
             } else {
                 mqtt.connect() // no-op if already connecting/connected; recovers a dropped link
             }
             delay(HEARTBEAT_INTERVAL_MS)
         }
+    }
+
+    /** Live device health reported alongside the heartbeat so the dashboard shows it. */
+    private fun buildTelemetry(): JSONObject {
+        val bm = getSystemService(Context.BATTERY_SERVICE) as BatteryManager
+        val am = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        return JSONObject().apply {
+            put("battery", bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY))
+            put("deviceOwner", owner.isDeviceOwner())
+            put("kioskActive", am.lockTaskModeState != ActivityManager.LOCK_TASK_MODE_NONE)
+            put("cameraDisabled", owner.isCameraDisabled())
+            put("statusBarDisabled", owner.isStatusBarDisabled())
+            put("keyguardDisabled", owner.isKeyguardDisabled())
+        }
+    }
+
+    /** Deliver a queued anti-theft alert (SIM_SWAP / TAMPER) + a fresh fix, then clear it. */
+    private fun flushPendingAlert() {
+        val type = RemoteConfig.pendingAlertType(this) ?: return
+        if (!mqtt.isConnected) return
+        mqtt.publishEvent(type, RemoteConfig.pendingAlertInfo(this))
+        freshFixOrLastKnown()?.let { mqtt.publishLocation(it.latitude, it.longitude, it.accuracy) }
+        RemoteConfig.clearPendingAlert(this)
+        Log.w(TAG, "delivered $type alert to server")
     }
 
     private fun ensureEnrolled() {
