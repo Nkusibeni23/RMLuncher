@@ -1,9 +1,12 @@
 # RMSOFT Launcher
 
-A custom enterprise Android launcher for RMSOFT LTD security facility devices.
+A custom enterprise Android launcher **+ MDM agent** for RMSOFT LTD security-facility devices.
 
 A full **Android Enterprise Device Owner** app — it enforces all kiosk/security policies
-natively via `DevicePolicyManager`, with no Headwind MDM or any third-party MDM.
+natively via `DevicePolicyManager`, with no Headwind MDM or any third-party MDM. On top of the
+sealed kiosk, a built-in device agent connects to `rmsoft-server` over **real-time MQTT** (with an
+HTTP telemetry/poll fallback) for remote management and anti-theft: remote lock, wipe, reboot,
+ring, SIM-change alerts, live app-whitelist push, and message-to-device.
 
 > 📖 **Full documentation lives in [`docs/`](docs/)** — start with [`docs/README.md`](docs/README.md):
 > - [Install runbook](docs/INSTALL.md) — the exact ADB steps to turn a phone into a sealed kiosk
@@ -27,6 +30,23 @@ natively via `DevicePolicyManager`, with no Headwind MDM or any third-party MDM.
 - Auto-launches on device boot and re-asserts all policies
 - Whitelist-based app control — only apps you approve are visible
 
+### Remote management & anti-theft (MDM agent)
+
+A background agent (`AgentService`) enrolls with `rmsoft-server` and holds a live command channel:
+
+- **Real-time MQTT push** (Eclipse Paho) so commands land instantly, with a 15s HTTP telemetry
+  poll as fallback and for enrollment
+- **Remote commands** executed against `DevicePolicyManager`: `LOCK` / `LOCK_NOW`, `UNLOCK`,
+  `REBOOT`, `WIPE`, `FACTORY_RESET`, `RING`, `MESSAGE` / `SHOW_MESSAGE`, `ENTER_KIOSK` /
+  `EXIT_KIOSK`, `SET_WHITELIST`, `SET_APP_HIDDEN`, `ENABLE_SYSTEM_APP`, `INSTALL_APK` /
+  `UPDATE_APP`, `SET_STATUS_BAR_DISABLED`, `SET_CAMERA_DISABLED`, `SET_KEYGUARD_DISABLED`,
+  `SET_USER_RESTRICTION`, `SET_LOCK_TASK_FEATURES`, `REAPPLY_POLICIES`, `SET_SERVER`
+- **Anti-theft** — SIM-change detection (`SimChangeReceiver` / `SimGuard`) alerts the server on a
+  swapped SIM; remote ring/alarm (`Ringer`), remote lock, and remote wipe for lost/stolen devices
+- **Remote app delivery** — push/install/update APKs silently as Device Owner (`ApkInstaller`)
+- **Encrypted enrollment** — device logs in for a JWT + device token, MQTT creds handed back at
+  enrollment; secrets injected via the QR provisioning bundle, never hardcoded
+
 ## Project structure
 
 ```
@@ -38,10 +58,21 @@ app/src/main/
 │   │   └── AppGridAdapter.kt        # RecyclerView adapter for app grid
 │   ├── model/
 │   │   └── AppItem.kt               # App data model
+│   ├── remote/                      # MDM device agent (remote mgmt + anti-theft)
+│   │   ├── AgentService.kt          # Foreground agent — enroll, telemetry, command loop
+│   │   ├── MqttManager.kt           # Real-time command push (Eclipse Paho)
+│   │   ├── MdmApi.kt                # HTTP client to rmsoft-server (enroll/poll/ack)
+│   │   ├── CommandExecutor.kt       # Maps server commands → DeviceOwnerManager actions
+│   │   ├── RemoteConfig.kt          # Server URL, tokens, MQTT creds (SharedPreferences)
+│   │   ├── ApkInstaller.kt          # Silent Device-Owner APK install/update
+│   │   ├── Ringer.kt                # Remote ring/alarm for anti-theft
+│   │   ├── SimChangeReceiver.kt     # SIM-swap detection → server alert
+│   │   └── Crypto.kt                # Secret handling for enrollment
 │   └── utils/
 │       ├── AppWhitelist.kt          # ← Edit this to control which apps appear
 │       ├── DeviceOwnerManager.kt    # All DevicePolicyManager lockdown logic
 │       ├── RMSOFTAdminReceiver.kt   # DeviceAdminReceiver — provisioning + admin callbacks
+│       ├── SimGuard.kt              # SIM-change policy / lock response
 │       ├── StatusBarBlocker.kt      # Overlay shade-blocker (non-DO fallback)
 │       └── BootReceiver.kt          # Re-assert policies + auto-launch after reboot
 └── res/
