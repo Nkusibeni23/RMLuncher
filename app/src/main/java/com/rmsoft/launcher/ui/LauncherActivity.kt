@@ -89,11 +89,8 @@ class LauncherActivity : AppCompatActivity() {
             deviceOwner.allowAdbInstall()
         }
 
-        // Start the MDM device agent (enroll + poll for remote commands + telemetry).
+        // Start the MDM device agent (zero-touch auto-enroll + MQTT commands + telemetry).
         AgentService.start(this)
-
-        // First boot with no credentials: show the branded @rmsoft.rw enrollment gate.
-        EnrollmentActivity.launchIfNeeded(this)
 
         binding = ActivityLauncherBinding.inflate(layoutInflater)
         WindowCompat.setDecorFitsSystemWindows(window, false)

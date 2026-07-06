@@ -20,30 +20,26 @@ class MdmApi(private val context: Context) {
     data class RemoteCommand(val id: String, val type: String, val payload: JSONObject)
 
     /**
-     * Enroll this device against rmsoft-server. Two-step: log in with the device @rmsoft.rw account to
-     * get a JWT, then POST /api/enroll to receive the deviceId + MQTT creds. Saves both to
-     * [RemoteConfig] on success; the persistent MQTT link ([MqttManager]) takes over from there.
-     * Returns true on success. No-ops (false) until enrollment credentials are provisioned.
+     * ZERO-TOUCH enrollment: the phone enrolls itself on first boot with the shared secret baked into
+     * RMSoft OS — NO user login, no dial code, no user action. POSTs the baked secret + the hardware
+     * serial to /api/device/enroll; the server auto-creates the device record (assigned to the default
+     * admin owner) and hands back the MQTT creds. The device then appears in the dashboard on its own.
+     * Returns true on success.
      */
     fun enroll(name: String, model: String, androidSdk: Int, appVersion: String): Boolean {
-        if (!RemoteConfig.hasEnrollCredentials(context)) return false // awaiting QR/login provisioning
-
-        // 1. Login → JWT.
-        val token = login() ?: return false
-
-        // 2. Enroll → deviceId + MQTT creds.
         val body = JSONObject()
+            .put("enrollmentSecret", RemoteConfig.enrollmentSecret(context))
             .put("serialNumber", deviceSerial())
             .put("model", model)
             .put("androidVersion", android.os.Build.VERSION.RELEASE)
             .put("romBuild", android.os.Build.DISPLAY)
         hardwareSerial()?.let { body.put("hardwareSerial", it) }
 
-        val res = request("POST", "/api/enroll", body, auth = false, bearer = token) ?: return false
+        val res = request("POST", "/api/device/enroll", body, auth = false) ?: return false
         val deviceId = res.optString("deviceId").ifBlank { return false }
         val mqtt = res.optJSONObject("mqtt") ?: return false
 
-        RemoteConfig.saveEnrollment(context, deviceId, token)
+        RemoteConfig.saveEnrollment(context, deviceId, "") // no user token in zero-touch
         RemoteConfig.saveMqtt(
             context,
             url = mqtt.getString("url"),
@@ -54,15 +50,6 @@ class MdmApi(private val context: Context) {
             locationTopic = mqtt.getString("locationTopic"),
         )
         return true
-    }
-
-    /** Log in with the device @rmsoft.rw account; returns the access token or null. */
-    private fun login(): String? {
-        val body = JSONObject()
-            .put("email", RemoteConfig.enrollEmail(context))
-            .put("password", RemoteConfig.enrollPassword(context))
-        val res = request("POST", "/api/auth/login", body, auth = false) ?: return null
-        return res.optString("accessToken").ifBlank { null }
     }
 
     /** Real hardware serial — readable because RMLauncher is Device Owner (else null). */
