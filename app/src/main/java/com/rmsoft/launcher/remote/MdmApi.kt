@@ -52,12 +52,34 @@ class MdmApi(private val context: Context) {
         return true
     }
 
-    /** Real hardware serial — readable because RMLauncher is Device Owner (else null). */
-    private fun hardwareSerial(): String? = try {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) android.os.Build.getSerial()
-        else @Suppress("DEPRECATION") android.os.Build.SERIAL
-    } catch (e: SecurityException) {
-        null
+    /**
+     * True hardware serial (e.g. 3B240DLJH0013A) — the identity that survives factory resets, so a
+     * wiped + re-enrolled phone stays ONE record instead of duplicating.
+     *
+     * Reading it needs privilege: [android.os.Build.getSerial] only works when RMLauncher runs as the
+     * privileged system app baked into RMSoft OS (with READ_PRIVILEGED_PHONE_STATE allowlisted) or as
+     * Device Owner. A plain sideloaded /data build can't hold that permission and gets a
+     * SecurityException — so we fall back to reading the raw `ro.boot.serialno` boot property, which
+     * the privileged system app can read. Returns null only when nothing is readable.
+     */
+    private fun hardwareSerial(): String? {
+        // 1. Standard API — succeeds for the privileged system app / Device Owner.
+        runCatching {
+            val s = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O)
+                android.os.Build.getSerial()
+            else @Suppress("DEPRECATION") android.os.Build.SERIAL
+            if (!s.isNullOrBlank() && s != android.os.Build.UNKNOWN) return s
+        }
+        // 2. Privileged-app fallback: the raw serial straight from the boot properties.
+        for (prop in listOf("ro.boot.serialno", "ro.serialno")) {
+            runCatching {
+                val sp = Class.forName("android.os.SystemProperties")
+                val get = sp.getMethod("get", String::class.java)
+                val v = get.invoke(null, prop) as? String
+                if (!v.isNullOrBlank()) return v
+            }
+        }
+        return null
     }
 
     /**

@@ -27,6 +27,12 @@
     <uses-permission
         android:name="android.permission.MODIFY_PHONE_STATE"
         tools:ignore="ProtectedPermissions" />
+    <!-- Read the TRUE hardware serial (Build.getSerial → 3B240DLJH0013A) so a wiped + re-enrolled
+         phone stays ONE record. signature|privileged — granted only to the baked privileged system
+         app (allowlisted); a sideloaded /data build can't hold it and falls back to ANDROID_ID. -->
+    <uses-permission
+        android:name="android.permission.READ_PRIVILEGED_PHONE_STATE"
+        tools:ignore="ProtectedPermissions" />
 
     <!--
       Package visibility (Android 11+). We deliberately do NOT use QUERY_ALL_PACKAGES — Play Protect
