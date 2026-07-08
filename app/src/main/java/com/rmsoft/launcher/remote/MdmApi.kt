@@ -20,30 +20,26 @@ class MdmApi(private val context: Context) {
     data class RemoteCommand(val id: String, val type: String, val payload: JSONObject)
 
     /**
-     * Enroll this device against rmsoft-server. Two-step: log in with the device @rmsoft.rw account to
-     * get a JWT, then POST /api/enroll to receive the deviceId + MQTT creds. Saves both to
-     * [RemoteConfig] on success; the persistent MQTT link ([MqttManager]) takes over from there.
-     * Returns true on success. No-ops (false) until enrollment credentials are provisioned.
+     * ZERO-TOUCH enrollment: the phone enrolls itself on first boot with the shared secret baked into
+     * RMSoft OS — NO user login, no dial code, no user action. POSTs the baked secret + the hardware
+     * serial to /api/device/enroll; the server auto-creates the device record (assigned to the default
+     * admin owner) and hands back the MQTT creds. The device then appears in the dashboard on its own.
+     * Returns true on success.
      */
     fun enroll(name: String, model: String, androidSdk: Int, appVersion: String): Boolean {
-        if (!RemoteConfig.hasEnrollCredentials(context)) return false // awaiting QR/login provisioning
-
-        // 1. Login → JWT.
-        val token = login() ?: return false
-
-        // 2. Enroll → deviceId + MQTT creds.
         val body = JSONObject()
+            .put("enrollmentSecret", RemoteConfig.enrollmentSecret(context))
             .put("serialNumber", deviceSerial())
             .put("model", model)
             .put("androidVersion", android.os.Build.VERSION.RELEASE)
             .put("romBuild", android.os.Build.DISPLAY)
         hardwareSerial()?.let { body.put("hardwareSerial", it) }
 
-        val res = request("POST", "/api/enroll", body, auth = false, bearer = token) ?: return false
+        val res = request("POST", "/api/device/enroll", body, auth = false) ?: return false
         val deviceId = res.optString("deviceId").ifBlank { return false }
         val mqtt = res.optJSONObject("mqtt") ?: return false
 
-        RemoteConfig.saveEnrollment(context, deviceId, token)
+        RemoteConfig.saveEnrollment(context, deviceId, "") // no user token in zero-touch
         RemoteConfig.saveMqtt(
             context,
             url = mqtt.getString("url"),
@@ -56,21 +52,34 @@ class MdmApi(private val context: Context) {
         return true
     }
 
-    /** Log in with the device @rmsoft.rw account; returns the access token or null. */
-    private fun login(): String? {
-        val body = JSONObject()
-            .put("email", RemoteConfig.enrollEmail(context))
-            .put("password", RemoteConfig.enrollPassword(context))
-        val res = request("POST", "/api/auth/login", body, auth = false) ?: return null
-        return res.optString("accessToken").ifBlank { null }
-    }
-
-    /** Real hardware serial — readable because RMLauncher is Device Owner (else null). */
-    private fun hardwareSerial(): String? = try {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) android.os.Build.getSerial()
-        else @Suppress("DEPRECATION") android.os.Build.SERIAL
-    } catch (e: SecurityException) {
-        null
+    /**
+     * True hardware serial (e.g. 3B240DLJH0013A) — the identity that survives factory resets, so a
+     * wiped + re-enrolled phone stays ONE record instead of duplicating.
+     *
+     * Reading it needs privilege: [android.os.Build.getSerial] only works when RMLauncher runs as the
+     * privileged system app baked into RMSoft OS (with READ_PRIVILEGED_PHONE_STATE allowlisted) or as
+     * Device Owner. A plain sideloaded /data build can't hold that permission and gets a
+     * SecurityException — so we fall back to reading the raw `ro.boot.serialno` boot property, which
+     * the privileged system app can read. Returns null only when nothing is readable.
+     */
+    private fun hardwareSerial(): String? {
+        // 1. Standard API — succeeds for the privileged system app / Device Owner.
+        runCatching {
+            val s = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O)
+                android.os.Build.getSerial()
+            else @Suppress("DEPRECATION") android.os.Build.SERIAL
+            if (!s.isNullOrBlank() && s != android.os.Build.UNKNOWN) return s
+        }
+        // 2. Privileged-app fallback: the raw serial straight from the boot properties.
+        for (prop in listOf("ro.boot.serialno", "ro.serialno")) {
+            runCatching {
+                val sp = Class.forName("android.os.SystemProperties")
+                val get = sp.getMethod("get", String::class.java)
+                val v = get.invoke(null, prop) as? String
+                if (!v.isNullOrBlank()) return v
+            }
+        }
+        return null
     }
 
     /**

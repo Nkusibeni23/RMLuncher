@@ -88,7 +88,9 @@ class DeviceOwnerManager(context: Context) {
 
         // Tamper hardening: block OEM/bootloader unlock so a thief can't flash away the RMSoft ROM,
         // and block safe-boot (which would start the phone without our launcher/agent).
-        runCatching { dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_OEM_UNLOCK) }
+        // "no_oem_unlock" = UserManager.DISALLOW_OEM_UNLOCK, which is @SystemApi (not in the public
+        // SDK), so we pass the restriction key as a literal.
+        runCatching { dpm.addUserRestriction(adminComponent, "no_oem_unlock") }
         runCatching { dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_SAFE_BOOT) }
 
         // OTA: install approved system updates automatically (security patches / ROM OTA), so the
@@ -109,6 +111,26 @@ class DeviceOwnerManager(context: Context) {
         if (!isDeviceOwner()) return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             runCatching { dpm.setLocationEnabled(adminComponent, true) }
+        }
+    }
+
+    /**
+     * Baseline policies for a NORMAL (non-kiosk) RMSoft OS device. Grants the agent's runtime
+     * permissions (location — which also prevents the location-FGS crash), enables location services,
+     * and enforces the security rules (eSIM-only, block OEM-unlock + safe-boot, auto system updates).
+     * Does NOT hide/purge apps, disable the status bar/camera/keyguard, or enter kiosk — the phone
+     * stays fully usable with its normal launcher. Kiosk is opt-in via the ENTER_KIOSK command.
+     * Safe no-op when not Device Owner.
+     */
+    fun applyBaselinePolicies() {
+        if (!isDeviceOwner()) return
+        grantRuntimePermissions()
+        enableLocationServices()
+        runCatching { SimPolicy.enforceEsimOnly(appContext) }
+        runCatching { dpm.addUserRestriction(adminComponent, "no_oem_unlock") }
+        runCatching { dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_SAFE_BOOT) }
+        runCatching {
+            dpm.setSystemUpdatePolicy(adminComponent, SystemUpdatePolicy.createAutomaticInstallPolicy())
         }
     }
 

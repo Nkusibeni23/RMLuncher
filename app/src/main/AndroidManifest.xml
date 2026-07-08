@@ -27,6 +27,12 @@
     <uses-permission
         android:name="android.permission.MODIFY_PHONE_STATE"
         tools:ignore="ProtectedPermissions" />
+    <!-- Read the TRUE hardware serial (Build.getSerial → 3B240DLJH0013A) so a wiped + re-enrolled
+         phone stays ONE record. signature|privileged — granted only to the baked privileged system
+         app (allowlisted); a sideloaded /data build can't hold it and falls back to ANDROID_ID. -->
+    <uses-permission
+        android:name="android.permission.READ_PRIVILEGED_PHONE_STATE"
+        tools:ignore="ProtectedPermissions" />
 
     <!--
       Package visibility (Android 11+). We deliberately do NOT use QUERY_ALL_PACKAGES — Play Protect
@@ -70,26 +76,19 @@
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:theme="@style/Theme.RMSOFTLauncher"
-        android:persistent="true"
         tools:ignore="UnusedAttribute">
 
-        <!-- Main Launcher Activity -->
+        <!-- Background-agent mode: RMSoft OS keeps its normal launcher; this app is an INVISIBLE
+             MDM agent (no HOME role, no launcher icon). The old kiosk LauncherActivity is retained
+             but not registered as a launcher/home — it's only used if kiosk mode is ever enabled. -->
         <activity
             android:name=".ui.LauncherActivity"
-            android:exported="true"
+            android:exported="false"
             android:launchMode="singleTask"
             android:stateNotNeeded="true"
             android:resumeWhilePausing="true"
             android:screenOrientation="portrait"
-            android:windowSoftInputMode="adjustPan">
-            <intent-filter android:priority="999">
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.HOME" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.MONKEY" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
+            android:windowSoftInputMode="adjustPan" />
 
         <!-- Custom restricted Settings screen -->
         <activity
@@ -108,12 +107,6 @@
             android:theme="@style/Theme.RMSOFTLauncher.Settings" />
 
         <!-- Branded first-boot @rmsoft.rw enrollment gate (shown when unenrolled). -->
-        <activity
-            android:name=".ui.EnrollmentActivity"
-            android:exported="false"
-            android:launchMode="singleTop"
-            android:excludeFromRecents="true"
-            android:screenOrientation="portrait" />
 
         <!-- Full-screen alert for admin-pushed messages (SHOW_MESSAGE command) -->
         <activity
@@ -143,7 +136,7 @@
             </intent-filter>
         </activity>
 
-        <!-- Boot receiver to restart launcher if killed -->
+        <!-- Boot receiver: start the MDM agent on boot / after self-update -->
         <receiver
             android:name=".utils.BootReceiver"
             android:exported="true">

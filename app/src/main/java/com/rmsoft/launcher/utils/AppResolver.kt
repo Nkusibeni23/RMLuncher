@@ -3,6 +3,7 @@ package com.rmsoft.launcher.utils
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.provider.AlarmClock
 import android.provider.ContactsContract
@@ -77,6 +78,19 @@ object AppResolver {
             firstInstalled(pm, KNOWN_CAMERA),
         )?.let { out.add(it) }
 
+        // Browser — the registered default browser (CATEGORY_BROWSABLE web intent), else a known
+        // Chromium package (Cromite first — the browser baked into RMSoft OS). Without this the kiosk
+        // would hide/purge the browser, leaving only the WebView component (which has no browser UI).
+        firstOf(
+            pm,
+            resolve(
+                pm,
+                Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com"))
+                    .addCategory(Intent.CATEGORY_BROWSABLE),
+            ),
+            firstInstalled(pm, KNOWN_BROWSER),
+        )?.let { out.add(it) }
+
         return out.toList()
     }
 
@@ -133,5 +147,12 @@ object AppResolver {
     private val KNOWN_CAMERA = listOf(
         "com.mediatek.camera", "com.android.camera2", "com.android.camera",
         "com.google.android.GoogleCamera",
+    )
+    private val KNOWN_BROWSER = listOf(
+        "org.cromite.cromite",   // Cromite — the Chromium browser baked into RMSoft OS
+        "com.android.chrome",    // Chrome
+        "org.chromium.chrome",   // Chromium
+        "org.bromite.bromite",   // Bromite
+        "com.brave.browser",     // Brave
     )
 }
