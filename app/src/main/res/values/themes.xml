@@ -38,4 +38,13 @@
         <item name="android:navigationBarColor">@color/rm_white</item>
         <item name="colorAccent">@color/rm_green</item>
     </style>
+
+    <!-- Branded RMSoft home: wallpaper background, transparent bars, dark (light-bg) status icons. -->
+    <style name="Theme.RMSOFTLauncher.Home" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="android:windowBackground">@drawable/bg_home</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="colorAccent">@color/rm_green</item>
+    </style>
 </resources>

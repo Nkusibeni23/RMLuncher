@@ -112,6 +112,10 @@ class DeviceOwnerManager(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             runCatching { dpm.setLocationEnabled(adminComponent, true) }
         }
+        // Anti-theft: lock location ON. DISALLOW_CONFIG_LOCATION greys out the Location toggle in
+        // Settings + Quick Settings, so neither the user nor a thief can turn it off — LOCATE always
+        // works. Combined with setLocationEnabled(true) above, location is forced on and stays on.
+        runCatching { dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_CONFIG_LOCATION) }
     }
 
     /**

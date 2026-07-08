@@ -142,6 +142,11 @@
             </intent-filter>
         </activity>
 
+        <!-- NOTE: the branded home is now AOSP Launcher3 (full launcher: app drawer, drag-to-dock,
+             widgets), branded via an OS overlay (RMSoft wallpaper + name) in the RMSoft OS build.
+             RMLauncher is the invisible MDM agent + Welcome + RMSoft Mail — it is NOT the home.
+             (HomeActivity.kt is kept but no longer registered as a HOME activity.) -->
+
         <!--
           Android 10+ managed-provisioning handshake. After QR / NFC / cloud enrollment downloads
           the APK, installs it, and grants Device Owner, the setup wizard hands off to these two
