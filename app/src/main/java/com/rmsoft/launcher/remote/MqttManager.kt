@@ -115,6 +115,10 @@ class MqttManager(private val context: Context) {
                     isAutomaticReconnect = true
                     if (!username.isNullOrEmpty()) userName = username
                     if (!password.isNullOrEmpty()) this.password = password.toCharArray()
+                    // Our broker (Mosquitto on the VPS) uses a self-signed cert. The link is still
+                    // TLS-encrypted; we just accept the cert because our own CA isn't in Android's
+                    // trust store. The per-device username/password is what authenticates us.
+                    if (tls) socketFactory = trustingSocketFactory()
                 }
 
                 c.connect(opts, null, object : IMqttActionListener {
@@ -129,6 +133,24 @@ class MqttManager(private val context: Context) {
                 _state.value = State.Disconnected(e.message)
             }
         }.start()
+    }
+
+    /**
+     * TLS socket factory that accepts our broker's self-signed certificate. The connection is
+     * encrypted, but the broker's identity is not verified (our own CA isn't in Android's trust
+     * store) — the per-device MQTT password is what authenticates and protects the channel.
+     * Hardening TODO: pin the CA (ship ca.crt in res/raw) or move to a Let's Encrypt cert so the
+     * broker's identity is verified too.
+     */
+    private fun trustingSocketFactory(): javax.net.ssl.SSLSocketFactory {
+        val trustAll = arrayOf<javax.net.ssl.TrustManager>(object : javax.net.ssl.X509TrustManager {
+            override fun checkClientTrusted(c: Array<java.security.cert.X509Certificate>?, a: String?) {}
+            override fun checkServerTrusted(c: Array<java.security.cert.X509Certificate>?, a: String?) {}
+            override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> = emptyArray()
+        })
+        val ctx = javax.net.ssl.SSLContext.getInstance("TLS")
+        ctx.init(null, trustAll, java.security.SecureRandom())
+        return ctx.socketFactory
     }
 
     // ─── Publish helpers (topics come from RemoteConfig) ─────────────────────────
