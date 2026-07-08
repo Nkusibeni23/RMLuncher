@@ -21,4 +21,21 @@
         <item name="colorAccent">@color/rmsoft_accent</item>
         <item name="android:colorControlActivated">@color/rmsoft_accent</item>
     </style>
+
+    <!-- First-run Welcome: clean white + green (matches the dashboard). -->
+    <style name="Theme.RMSOFTLauncher.Welcome" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="android:windowBackground">@color/rm_white</item>
+        <item name="android:statusBarColor">@color/rm_white</item>
+        <item name="android:navigationBarColor">@color/rm_white</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="colorAccent">@color/rm_green</item>
+    </style>
+
+    <!-- RMSoft Mail: green status bar, white body. -->
+    <style name="Theme.RMSOFTLauncher.Mail" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="android:windowBackground">@color/rm_white</item>
+        <item name="android:statusBarColor">@color/rm_green</item>
+        <item name="android:navigationBarColor">@color/rm_white</item>
+        <item name="colorAccent">@color/rm_green</item>
+    </style>
 </resources>

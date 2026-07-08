@@ -20,6 +20,12 @@ class BootReceiver : BroadcastReceiver() {
 
                 // Start the silent MDM device agent (MQTT: lock/wipe/track/ring/…).
                 AgentService.start(context)
+
+                // First-run Welcome (user-facing splash + RMSoft Mail): show once, only on a real
+                // boot — not on an app self-update. No-op after it has been seen/dismissed.
+                if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
+                    com.rmsoft.launcher.ui.WelcomeActivity.launchIfFirstRun(context)
+                }
             }
         }
     }

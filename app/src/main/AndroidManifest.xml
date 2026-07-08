@@ -117,6 +117,31 @@
             android:screenOrientation="portrait"
             android:theme="@style/Theme.RMSOFTLauncher.Settings" />
 
+        <!-- First-run Welcome: branded splash + skippable RMSoft Mail suggestion. Shown once on
+             first boot (BootReceiver), then never again. -->
+        <activity
+            android:name=".ui.WelcomeActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.RMSOFTLauncher.Welcome" />
+
+        <!-- RMSoft Mail: WebView wrapper for mail.rmsoft.rw, shown as its own launchable app so the
+             user gets a native-feeling mailbox (and can pick it as their mail app). -->
+        <activity
+            android:name=".ui.MailActivity"
+            android:exported="true"
+            android:label="RMSoft Mail"
+            android:icon="@drawable/ic_mail_app"
+            android:launchMode="singleTask"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.RMSOFTLauncher.Mail">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
         <!--
           Android 10+ managed-provisioning handshake. After QR / NFC / cloud enrollment downloads
           the APK, installs it, and grants Device Owner, the setup wizard hands off to these two

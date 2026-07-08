@@ -10,4 +10,14 @@
     <color name="rmsoft_text_secondary">#B3FFFFFF</color>
     <color name="rmsoft_text_tertiary">#80FFFFFF</color>
     <color name="rmsoft_divider">#1FFFFFFF</color>
+
+    <!-- White + green (first-run Welcome + RMSoft Mail) — matches the RMSoft dashboard. -->
+    <color name="rm_green">#12A85E</color>
+    <color name="rm_green_deep">#0E8F4F</color>
+    <color name="rm_green_soft">#E6F5EC</color>
+    <color name="rm_ink">#0F1B14</color>
+    <color name="rm_slate">#5B6B62</color>
+    <color name="rm_canvas">#F4F7F5</color>
+    <color name="rm_line">#E4EAE6</color>
+    <color name="rm_white">#FFFFFF</color>
 </resources>

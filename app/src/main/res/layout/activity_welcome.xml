@@ -1,0 +1,228 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ViewFlipper xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/welcomeFlipper"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/rm_white">
+
+    <!-- 1. Splash -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:paddingHorizontal="32dp"
+        android:paddingVertical="44dp">
+
+        <Space android:layout_width="0dp" android:layout_height="0dp" android:layout_weight="1" />
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="top">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="RMsoft"
+                android:textColor="@color/rm_ink"
+                android:textSize="46sp"
+                android:textStyle="bold"
+                android:letterSpacing="-0.02" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="OS"
+                android:textColor="@color/rm_green"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:paddingStart="4dp"
+                android:paddingTop="8dp"
+                android:letterSpacing="0.08" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Your device is ready. Let's get you set up in a few taps."
+            android:textColor="@color/rm_slate"
+            android:textSize="15sp"
+            android:gravity="center"
+            android:maxWidth="260dp"
+            android:lineSpacingMultiplier="1.25" />
+
+        <Space android:layout_width="0dp" android:layout_height="0dp" android:layout_weight="1" />
+
+        <Button
+            android:id="@+id/welcomeGetStarted"
+            android:layout_width="match_parent"
+            android:layout_height="54dp"
+            android:text="Get started"
+            android:textColor="@color/rm_white"
+            android:textSize="16sp"
+            android:textAllCaps="false"
+            android:background="@drawable/bg_btn_primary" />
+
+        <Button
+            android:id="@+id/welcomeSkip"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="8dp"
+            android:text="Skip"
+            android:textColor="@color/rm_slate"
+            android:textSize="15sp"
+            android:textAllCaps="false"
+            android:background="?android:attr/selectableItemBackground" />
+    </LinearLayout>
+
+    <!-- 2. RMSoft Mail -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:paddingHorizontal="32dp"
+        android:paddingVertical="44dp">
+
+        <Space android:layout_width="0dp" android:layout_height="0dp" android:layout_weight="1" />
+
+        <ImageView
+            android:layout_width="96dp"
+            android:layout_height="96dp"
+            android:background="@drawable/bg_disc_soft"
+            android:padding="26dp"
+            android:src="@drawable/ic_mail"
+            android:contentDescription="RMSoft Mail" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="22dp"
+            android:text="Get RMSoft Mail"
+            android:textColor="@color/rm_ink"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="mail.rmsoft.rw"
+            android:textColor="@color/rm_green_deep"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginTop="22dp">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:drawableStart="@drawable/ic_tick"
+                android:drawablePadding="10dp"
+                android:gravity="center_vertical"
+                android:text="Your @rmsoft.rw address"
+                android:textColor="@color/rm_slate"
+                android:textSize="14sp" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:drawableStart="@drawable/ic_tick"
+                android:drawablePadding="10dp"
+                android:gravity="center_vertical"
+                android:text="Fast, clean, no ads"
+                android:textColor="@color/rm_slate"
+                android:textSize="14sp" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:drawableStart="@drawable/ic_tick"
+                android:drawablePadding="10dp"
+                android:gravity="center_vertical"
+                android:text="You can always use another app"
+                android:textColor="@color/rm_slate"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <Space android:layout_width="0dp" android:layout_height="0dp" android:layout_weight="1" />
+
+        <Button
+            android:id="@+id/welcomeMailUse"
+            android:layout_width="match_parent"
+            android:layout_height="54dp"
+            android:text="Use RMSoft Mail"
+            android:textColor="@color/rm_white"
+            android:textSize="16sp"
+            android:textAllCaps="false"
+            android:background="@drawable/bg_btn_primary" />
+
+        <Button
+            android:id="@+id/welcomeMailSkip"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="8dp"
+            android:text="Skip for now"
+            android:textColor="@color/rm_slate"
+            android:textSize="15sp"
+            android:textAllCaps="false"
+            android:background="?android:attr/selectableItemBackground" />
+    </LinearLayout>
+
+    <!-- 3. Done -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:paddingHorizontal="32dp"
+        android:paddingVertical="44dp">
+
+        <Space android:layout_width="0dp" android:layout_height="0dp" android:layout_weight="1" />
+
+        <ImageView
+            android:layout_width="96dp"
+            android:layout_height="96dp"
+            android:background="@drawable/bg_disc_solid"
+            android:padding="26dp"
+            android:src="@drawable/ic_check"
+            android:contentDescription="Done" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="22dp"
+            android:text="You're all set"
+            android:textColor="@color/rm_ink"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Enjoy your RMSoft device. Everything's ready to go."
+            android:textColor="@color/rm_slate"
+            android:textSize="15sp"
+            android:gravity="center"
+            android:maxWidth="250dp"
+            android:lineSpacingMultiplier="1.25" />
+
+        <Space android:layout_width="0dp" android:layout_height="0dp" android:layout_weight="1" />
+
+        <Button
+            android:id="@+id/welcomeFinish"
+            android:layout_width="match_parent"
+            android:layout_height="54dp"
+            android:text="Finish"
+            android:textColor="@color/rm_white"
+            android:textSize="16sp"
+            android:textAllCaps="false"
+            android:background="@drawable/bg_btn_primary" />
+    </LinearLayout>
+
+</ViewFlipper>

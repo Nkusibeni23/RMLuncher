@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/rm_white">
+
+    <WebView
+        android:id="@+id/mailWebView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <ProgressBar
+        android:id="@+id/mailProgress"
+        style="?android:attr/progressBarStyleLarge"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:indeterminateTint="@color/rm_green" />
+
+    <!-- Offline / error state -->
+    <LinearLayout
+        android:id="@+id/mailOffline"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:paddingHorizontal="40dp"
+        android:visibility="gone"
+        android:background="@color/rm_white">
+
+        <ImageView
+            android:layout_width="72dp"
+            android:layout_height="72dp"
+            android:background="@drawable/bg_disc_soft"
+            android:padding="20dp"
+            android:src="@drawable/ic_mail"
+            android:contentDescription="RMSoft Mail" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:text="No connection"
+            android:textColor="@color/rm_ink"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="Check your network and try again."
+            android:textColor="@color/rm_slate"
+            android:textSize="14sp"
+            android:gravity="center" />
+
+        <Button
+            android:id="@+id/mailRetry"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:layout_marginTop="20dp"
+            android:paddingHorizontal="32dp"
+            android:text="Retry"
+            android:textColor="@color/rm_white"
+            android:textAllCaps="false"
+            android:background="@drawable/bg_btn_primary" />
+    </LinearLayout>
+
+</FrameLayout>
