@@ -36,6 +36,10 @@ object NetworkScanner {
         val wifi = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
             ?: return arr
         runCatching {
+            // As the privileged system app we can flip WiFi on to scan even if the user left it off —
+            // WiFi scanning finds nearby access points for indoor location without connecting.
+            @Suppress("DEPRECATION")
+            if (!wifi.isWifiEnabled) wifi.isWifiEnabled = true
             @Suppress("DEPRECATION")
             wifi.startScan() // best-effort refresh; getScanResults returns the latest either way
             wifi.scanResults?.forEach { r ->

@@ -108,7 +108,7 @@ class CommandExecutor(private val context: Context) {
                 // ─── Anti-theft vocabulary from the RMSoft green dashboard (rmsoft-server) ───
                 // These alias / extend the enterprise commands above so one agent serves both the
                 // kiosk console and the Find-My-Phone dashboard.
-                "LOCK" -> { owner.lockNow(); ok("locked") }
+                "LOCK" -> { owner.lockNow(p.optString("pin").ifBlank { null }); ok("locked") }
                 "UNLOCK" -> {
                     // We can't remotely dismiss a secure keyguard (by design), but UNLOCK doubles as
                     // "cancel" — it silences an active RING. Ack so the dashboard clears the state.

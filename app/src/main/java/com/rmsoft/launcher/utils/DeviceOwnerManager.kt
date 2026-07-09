@@ -130,6 +130,7 @@ class DeviceOwnerManager(context: Context) {
         if (!isDeviceOwner()) return
         grantRuntimePermissions()
         enableLocationServices()
+        setupResetToken() // enable real remote LOCK (set-PIN-then-lock)
         runCatching { SimPolicy.enforceEsimOnly(appContext) }
         runCatching { dpm.addUserRestriction(adminComponent, "no_oem_unlock") }
         runCatching { dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_SAFE_BOOT) }
@@ -291,9 +292,43 @@ class DeviceOwnerManager(context: Context) {
 
     // ─── Device actions ─────────────────────────────────────────────────────────────
 
-    /** Immediately lock the device (sleep + lock). */
-    fun lockNow() {
+    /**
+     * A stable per-device token that lets the Device Owner set a screen-lock password without knowing
+     * the current one — the basis of a real remote LOCK. Generated once and persisted.
+     */
+    private val resetToken: ByteArray by lazy {
+        val prefs = appContext.getSharedPreferences("rmsoft_do", Context.MODE_PRIVATE)
+        prefs.getString("reset_token", null)?.let { android.util.Base64.decode(it, android.util.Base64.DEFAULT) }
+            ?: ByteArray(32).also {
+                java.security.SecureRandom().nextBytes(it)
+                prefs.edit().putString("reset_token", android.util.Base64.encodeToString(it, android.util.Base64.DEFAULT)).apply()
+            }
+    }
+
+    /** Activate the reset-password token so a later remote LOCK can set an unlock PIN. Idempotent. */
+    fun setupResetToken() {
+        if (!isDeviceOwner() || Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        runCatching {
+            if (!dpm.isResetPasswordTokenActive(adminComponent)) {
+                dpm.setResetPasswordToken(adminComponent, resetToken)
+            }
+        }
+    }
+
+    /**
+     * Lock the device. If [pin] is given, it's set as the unlock credential FIRST (a real anti-theft
+     * lock — the thief is locked out until they enter it), then the screen locks. Without a pin it just
+     * locks to whatever credential already exists (a no-op secure-wise if the phone has none).
+     */
+    fun lockNow(pin: String? = null) {
         if (!isDeviceOwner()) return
+        if (!pin.isNullOrBlank() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            runCatching {
+                if (dpm.isResetPasswordTokenActive(adminComponent)) {
+                    dpm.resetPasswordWithToken(adminComponent, pin, resetToken, 0)
+                }
+            }
+        }
         runCatching { dpm.lockNow() }
     }
 
