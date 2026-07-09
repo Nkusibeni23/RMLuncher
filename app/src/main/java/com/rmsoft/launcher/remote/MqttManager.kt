@@ -193,6 +193,20 @@ class MqttManager(private val context: Context) {
         publish("device/$deviceId/events", body.toString())
     }
 
+    /**
+     * Send a WiFi + cell scan to device/{id}/scan so the server can resolve it to a position via the
+     * Google Geolocation API — the indoor half of LOCATE. [cmdId] lets the server ack the LOCATE
+     * command once it has the fix.
+     */
+    fun publishScan(cmdId: String, scan: NetworkScanner.Scan) {
+        val deviceId = RemoteConfig.deviceId(context) ?: return
+        val body = JSONObject()
+            .put("cmdId", cmdId)
+            .put("wifi", scan.wifi)
+            .put("cells", scan.cells)
+        publish("device/$deviceId/scan", body.toString())
+    }
+
     fun publish(topic: String, payload: String, qos: Int = 1) {
         val c = client ?: run { Log.w(tag, "publish before connect"); return }
         try {

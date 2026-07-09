@@ -19,6 +19,11 @@
     <!-- Location reporting in telemetry (auto-granted by Device Owner). -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Network location: scan nearby WiFi + cell towers, sent to the server for Google Geolocation
+         resolution so LOCATE works INDOORS (no GPS). -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <!-- eSIM-only enforcement: read the SIM list, then disable physical SIMs. MODIFY_PHONE_STATE is
          a privileged/system permission — granted only when RMLauncher is baked into RMSoft OS as a

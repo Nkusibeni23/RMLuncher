@@ -156,11 +156,23 @@ class AgentService : Service() {
         when (cmd.type) {
             "LOCATE_NOW" -> {
                 val loc = freshFixOrLastKnown()
-                if (loc != null) {
+                // Accurate GPS fix (outdoors) → report it directly; GPS is the most precise source.
+                if (loc != null && loc.accuracy <= 100f) {
                     mqtt.publishLocation(loc.latitude, loc.longitude, loc.accuracy)
-                    mqtt.publishAck(cmd.id, true, "location sent")
+                    mqtt.publishAck(cmd.id, true, "gps")
                 } else {
-                    mqtt.publishAck(cmd.id, false, "no location available")
+                    // No / poor GPS (indoors) → send a WiFi + cell scan; the server resolves it to a
+                    // position via the Google Geolocation API and acks the command. This is the indoor
+                    // half of LOCATE. Falls back to whatever GPS fix we had if there's nothing to scan.
+                    val scan = NetworkScanner.scan(this)
+                    when {
+                        !scan.isEmpty -> mqtt.publishScan(cmd.id, scan) // server resolves + acks
+                        loc != null -> {
+                            mqtt.publishLocation(loc.latitude, loc.longitude, loc.accuracy)
+                            mqtt.publishAck(cmd.id, true, "gps (approx)")
+                        }
+                        else -> mqtt.publishAck(cmd.id, false, "no location available")
+                    }
                 }
             }
             "WIPE", "FACTORY_RESET" -> {
