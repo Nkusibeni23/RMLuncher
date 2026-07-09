@@ -14,8 +14,12 @@ class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
             Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED -> {
-                // Baseline policies only (grants location so the agent never crashes; no kiosk).
-                // No-op if not provisioned as Device Owner.
+                // "Vault": auto-provision Device Owner first — so LOCK/WIPE survive a factory reset.
+                // No-op if already DO or if the privileged perms aren't held (sideloaded build).
+                DeviceProvisioner.ensureDeviceOwner(context)
+
+                // Baseline policies (grants location so the agent never crashes; no kiosk).
+                // Now runs WITH Device Owner powers thanks to the step above.
                 DeviceOwnerManager(context).applyBaselinePolicies()
 
                 // Start the silent MDM device agent (MQTT: lock/wipe/track/ring/…).

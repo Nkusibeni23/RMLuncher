@@ -39,6 +39,16 @@
         android:name="android.permission.READ_PRIVILEGED_PHONE_STATE"
         tools:ignore="ProtectedPermissions" />
 
+    <!-- "Vault": auto-provision Device Owner on every boot (incl. after a factory reset) so LOCK/WIPE
+         survive a thief's reset. signature|privileged — granted only to the baked, allowlisted system
+         app; a sideloaded build can't hold them (auto-provisioning no-ops there). -->
+    <uses-permission android:name="android.permission.MANAGE_DEVICE_ADMINS"
+        tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.MANAGE_PROFILE_AND_DEVICE_OWNERS"
+        tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
+
     <!--
       Package visibility (Android 11+). We deliberately do NOT use QUERY_ALL_PACKAGES — Play Protect
       treats it (with device-admin + overlay) as a high-risk "device admin abuse" signal and blocks
