@@ -184,10 +184,26 @@ class AgentService : Service() {
                 val r = executor.execute(cmd)
                 if (!r.success) mqtt.publishAck(cmd.id, false, r.message)
             }
+            "RE_ENROLL" -> reEnroll()
             else -> {
                 val r = executor.execute(cmd)
                 mqtt.publishAck(cmd.id, r.success, if (r.success) null else r.message)
             }
+        }
+    }
+
+    /**
+     * The server deleted our device record (heard our heartbeat, told us to re-register). Wipe the
+     * stored identity + MQTT creds and enroll again — the phone reappears in the dashboard within a
+     * minute, deduped by serial. No adb, no reset.
+     */
+    private suspend fun reEnroll() {
+        runCatching { mqtt.disconnect() }
+        RemoteConfig.clearForReEnroll(this)
+        runCatching { ensureEnrolled() }
+        if (RemoteConfig.hasMqtt(this)) {
+            mqtt.setCommandListener { cmd -> scope.launch { handleCommand(cmd) } }
+            mqtt.connect()
         }
     }
 

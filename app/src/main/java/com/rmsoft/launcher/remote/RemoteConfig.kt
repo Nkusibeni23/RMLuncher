@@ -173,6 +173,23 @@ object RemoteConfig {
             .apply()
     }
 
+    /**
+     * Wipe the stored identity AND MQTT creds so [hasMqtt] is false and the agent re-enrolls from
+     * scratch — used when the server deletes the device (RE_ENROLL). Keeps the server URL + secret.
+     */
+    fun clearForReEnroll(context: Context) {
+        prefs(context).edit()
+            .remove(KEY_TOKEN)
+            .remove(KEY_DEVICE_ID)
+            .remove(KEY_MQTT_URL)
+            .remove(KEY_MQTT_USER)
+            .remove(KEY_MQTT_PASS)
+            .remove(KEY_TOPIC_CMD)
+            .remove(KEY_TOPIC_ACK)
+            .remove(KEY_TOPIC_LOC)
+            .apply()
+    }
+
     fun setServer(context: Context, url: String, secret: String) {
         prefs(context).edit()
             .putString(KEY_SERVER, url.trimEnd('/'))
