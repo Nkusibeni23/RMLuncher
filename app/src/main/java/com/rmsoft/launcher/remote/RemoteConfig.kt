@@ -11,8 +11,9 @@ import android.content.Context
  */
 object RemoteConfig {
 
-    /** Base URL of the RMSoft MDM server (rmsoft-server on Railway). No trailing slash. */
-    const val DEFAULT_SERVER_URL = "https://aosp-production.up.railway.app"
+    /** Base URL of the RMSoft MDM server (rmsoft-server on the VPS, behind a real domain so the
+     *  server can move without re-baking phones — just repoint DNS). No trailing slash. */
+    const val DEFAULT_SERVER_URL = "https://aosp.api.rmsoft.rw"
 
     /** Shared secret required to enroll — must equal the server's ENROLLMENT_SECRET. */
     const val DEFAULT_ENROLLMENT_SECRET = "rmsoft-enroll-d2a1e709424b3794"
