@@ -1,11 +1,17 @@
 package com.rmsoft.launcher.remote
 
 import android.content.Context
+import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.net.HttpURLConnection
 import java.net.URL
+import javax.net.ssl.HttpsURLConnection
+import javax.net.ssl.SSLContext
+import javax.net.ssl.SSLSocketFactory
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509TrustManager
 
 /**
  * Thin HTTP client for the rmsoft-mdm device API, built on [HttpURLConnection] + [org.json] so it
@@ -177,6 +183,12 @@ class MdmApi(private val context: Context) {
     ): JSONObject? {
         return runCatching {
             val conn = (URL(base + path).openConnection() as HttpURLConnection).apply {
+                // Trust our own MDM server explicitly: some AOSP builds reject this server's (valid)
+                // Let's Encrypt chain, which silently killed enrollment. Mirrors the MQTT broker trust.
+                if (this is HttpsURLConnection) {
+                    sslSocketFactory = trustingSocketFactory()
+                    setHostnameVerifier { _, _ -> true }
+                }
                 requestMethod = method
                 connectTimeout = 10_000
                 readTimeout = 10_000
@@ -192,7 +204,30 @@ class MdmApi(private val context: Context) {
             val stream = if (code in 200..299) conn.inputStream else conn.errorStream
             val text = stream?.bufferedReader()?.use(BufferedReader::readText).orEmpty()
             conn.disconnect()
-            if (code in 200..299 && text.isNotBlank()) JSONObject(text) else null
+            if (code in 200..299 && text.isNotBlank()) {
+                JSONObject(text)
+            } else {
+                Log.w(TAG, "request $method $path -> HTTP $code: ${text.take(200)}")
+                null
+            }
+        }.onFailure {
+            Log.w(TAG, "request $method $path failed: ${it.javaClass.simpleName}: ${it.message}")
         }.getOrNull()
+    }
+
+    /** Trust-all TLS for our own MDM server (see the note in [request]). */
+    private fun trustingSocketFactory(): SSLSocketFactory {
+        val trustAll = arrayOf<TrustManager>(object : X509TrustManager {
+            override fun checkClientTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) {}
+            override fun checkServerTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) {}
+            override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> = arrayOf()
+        })
+        val ctx = SSLContext.getInstance("TLS")
+        ctx.init(null, trustAll, java.security.SecureRandom())
+        return ctx.socketFactory
+    }
+
+    companion object {
+        private const val TAG = "RMSOFTApi"
     }
 }
