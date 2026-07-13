@@ -90,8 +90,13 @@
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
+        android:persistent="true"
         android:theme="@style/Theme.RMSOFTLauncher"
-        tools:ignore="UnusedAttribute">
+        tools:ignore="UnusedAttribute"><!--
+        android:persistent — honoured only for a privileged system app (which RMSoft OS bakes this
+        as). It makes the OS start the agent process at boot AND restart it if it's ever killed, and
+        exempts it from "stopped state" — so after a WIPE or reboot it comes back online on its own,
+        with no manual launch. This is the reliability backbone of the always-online agent. -->
 
         <!-- Background-agent mode: RMSoft OS keeps its normal launcher; this app is an INVISIBLE
              MDM agent (no HOME role, no launcher icon). The old kiosk LauncherActivity is retained
