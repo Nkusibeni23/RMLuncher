@@ -68,16 +68,30 @@ class MqttManager(private val context: Context) {
         Thread {
             try {
                 val uri = URI(rawUrl)
-                val tls = uri.scheme == "mqtts" || uri.scheme == "ssl"
-                val scheme = if (tls) "ssl" else "tcp"
-                val port = if (uri.port > 0) uri.port else if (tls) 8883 else 1883
+                val ws = uri.scheme == "ws" || uri.scheme == "wss"
+                val tls = uri.scheme == "mqtts" || uri.scheme == "ssl" || uri.scheme == "wss"
                 val host = uri.host
-                val connectHost = if (tls) host else
-                    InetAddress.getAllByName(host).firstOrNull { it is Inet4Address }?.hostAddress ?: host
-                val serverUri = "$scheme://$connectHost:$port"
+                val serverUri = if (ws) {
+                    // MQTT-over-WebSocket — connects on 443, so it works on locked-down WiFi that
+                    // blocks 8883. Paho needs the FULL ws(s)://host:port/path (keep the /mqtt path).
+                    val port = if (uri.port > 0) uri.port else if (tls) 443 else 80
+                    val path = uri.path.ifEmpty { "/" }
+                    "${if (tls) "wss" else "ws"}://$host:$port$path"
+                } else {
+                    // Native TCP MQTT. Force IPv4 for plain TCP (some brokers refuse IPv6 → ECONNREFUSED).
+                    val scheme = if (tls) "ssl" else "tcp"
+                    val port = if (uri.port > 0) uri.port else if (tls) 8883 else 1883
+                    val connectHost = if (tls) host else
+                        InetAddress.getAllByName(host).firstOrNull { it is Inet4Address }?.hostAddress ?: host
+                    "$scheme://$connectHost:$port"
+                }
                 Log.i(tag, "connecting to $serverUri (host=$host)")
 
-                val c = MqttAsyncClient(serverUri, "rmsoft-launcher-${UUID.randomUUID()}", MemoryPersistence())
+                // Stable client id per device — a fresh random id every reconnect leaked broker
+                // sessions and churned connections. Same id → the broker cleanly replaces the old
+                // session instead of piling up orphans.
+                val clientId = "rmsoft-launcher-${RemoteConfig.deviceId(context) ?: "pending"}"
+                val c = MqttAsyncClient(serverUri, clientId, MemoryPersistence())
                 client = c
 
                 c.setCallback(object : MqttCallbackExtended {
