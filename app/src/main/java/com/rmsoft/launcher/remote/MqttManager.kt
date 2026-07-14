@@ -36,6 +36,8 @@ class MqttManager(private val context: Context) {
     val state: StateFlow<State> = _state
 
     private var client: MqttAsyncClient? = null
+    private var disconnectedAt = 0L // when the link dropped, for the wedged-client safety reset
+    private val WEDGE_RESET_MS = 180_000L // if auto-reconnect can't recover in 3 min, hard-reset
     private var commandListener: ((MdmApi.RemoteCommand) -> Unit)? = null
 
     sealed interface State {
@@ -56,6 +58,20 @@ class MqttManager(private val context: Context) {
         if (_state.value is State.Connecting || _state.value is State.Connected) {
             Log.i(tag, "already ${_state.value} — skipping duplicate connect")
             return
+        }
+        // CRITICAL: if a client already exists, Paho's automaticReconnect is recovering it. Opening a
+        // SECOND client with our stable id makes the broker kick them in an endless loop (a
+        // connection storm — the phone never stays online). So don't open a rival — UNLESS it's been
+        // wedged offline too long, in which case tear it down and open a fresh one.
+        client?.let { existing ->
+            val downMs = if (disconnectedAt == 0L) 0L else System.currentTimeMillis() - disconnectedAt
+            if (downMs < WEDGE_RESET_MS) {
+                Log.i(tag, "client exists (auto-reconnecting, down ${downMs}ms) — not opening a rival")
+                return
+            }
+            Log.w(tag, "client wedged ${downMs}ms — hard reset before reconnecting")
+            runCatching { existing.setCallback(null); existing.disconnectForcibly(0, 0); existing.close() }
+            client = null
         }
         val rawUrl = RemoteConfig.mqttUrl(context) ?: run { Log.w(tag, "no MQTT URL — not enrolled?"); return }
         val cmdTopic = RemoteConfig.commandTopic(context) ?: run { Log.w(tag, "no command topic"); return }
@@ -98,6 +114,7 @@ class MqttManager(private val context: Context) {
                     override fun connectComplete(reconnect: Boolean, serverURI: String?) {
                         Log.i(tag, "connected (reconnect=$reconnect)")
                         _state.value = State.Connected
+                        disconnectedAt = 0L
                         runCatching { c.subscribe(cmdTopic, 1) }
                             .onSuccess { Log.i(tag, "subscribed to $cmdTopic") }
                             .onFailure { Log.e(tag, "subscribe failed", it) }
@@ -105,6 +122,7 @@ class MqttManager(private val context: Context) {
                     override fun connectionLost(cause: Throwable?) {
                         Log.w(tag, "connection lost: ${cause?.message}")
                         _state.value = State.Disconnected(cause?.message)
+                        if (disconnectedAt == 0L) disconnectedAt = System.currentTimeMillis()
                     }
                     override fun messageArrived(topic: String?, message: MqttMessage?) {
                         val payload = message?.payload?.let { String(it) } ?: return
@@ -140,6 +158,7 @@ class MqttManager(private val context: Context) {
                     override fun onFailure(asyncActionToken: IMqttToken?, exception: Throwable?) {
                         Log.e(tag, "connect failed", exception)
                         _state.value = State.Disconnected(exception?.message)
+                        if (disconnectedAt == 0L) disconnectedAt = System.currentTimeMillis()
                     }
                 })
             } catch (e: Exception) {
